@@ -1,6 +1,8 @@
 # Configuration Netlify : site statique + fonctions serverless.
 # Aucune commande de build (le site est du HTML simple).
+# functions = "." : les fonctions sont dans le meme dossier que index.html
+# (structure a plat). Netlify traite analyze.js et lead.js comme des fonctions.
 
 [build]
   publish = "."
-  functions = "netlify/functions"
+  functions = "."
