@@ -209,6 +209,177 @@ function niveauPresence(score) {
   return "faible";
 }
 
+// --------- Validation du domaine ---------
+// Rejette les saisies qui ne sont pas des noms de domaine (ex : "challenges").
+function domaineValide(host) {
+  if (!host) return false;
+  if (host.length > 253) return false;
+  return /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*\.[a-z]{2,24}$/i.test(host);
+}
+
+// --------- Lecture reelle des pages du site ---------
+// Recupere la page d'accueil, y repere des articles, et mesure les signaux
+// qui determinent la citation par les IA. Tout est factuel, rien n'est estime ici.
+// Les delais sont courts et les appels parallelises : la fonction doit tenir
+// dans le temps d'execution alloue par Netlify.
+
+const UA = { "user-agent": "ReadrDiagnostic/1.0 (+https://www.readr.agency)" };
+
+async function getHTML(u, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(function () { ctrl.abort(); }, ms || 3000);
+  try {
+    const r = await fetch(u, { signal: ctrl.signal, redirect: "follow", headers: UA });
+    clearTimeout(timer);
+    if (!r.ok) return null;
+    const ct = r.headers.get("content-type") || "";
+    if (ct && ct.indexOf("html") === -1) return null;
+    const txt = await r.text();
+    return { html: txt.slice(0, 400000), urlFinale: r.url || u };
+  } catch (e) {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+// Retire scripts, styles et balises pour obtenir le texte visible.
+function texteVisible(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Cherche des liens d'articles plausibles sur la page d'accueil.
+function trouverArticles(html, origin) {
+  const exclus = /\/(tag|tags|category|categories|auteur|author|page|abonnement|abonnez|newsletter|contact|mentions|cgv|cgu|privacy|login|compte|recherche|search|rss|feed)\b/i;
+  const liens = [];
+  const re = /<a\s[^>]*href=["']([^"'#]+)["']/gi;
+  let m;
+  while ((m = re.exec(html)) !== null && liens.length < 200) {
+    let href = m[1];
+    if (!href || href.indexOf("mailto:") === 0 || href.indexOf("javascript:") === 0) continue;
+    let abs;
+    try { abs = new URL(href, origin).href; } catch (e) { continue; }
+    if (abs.indexOf(origin) !== 0) continue;
+    if (exclus.test(abs)) continue;
+    const chemin = abs.slice(origin.length);
+    if (chemin.length < 12) continue;
+    const segments = chemin.split("/").filter(Boolean);
+    if (segments.length < 1) continue;
+    const dernier = segments[segments.length - 1];
+    if (dernier.indexOf("-") === -1 && !/\d/.test(dernier)) continue;
+    if (liens.indexOf(abs) === -1) liens.push(abs);
+  }
+  return liens.slice(0, 2);
+}
+
+// Analyse une page article et en extrait les signaux mesurables.
+function analyserPage(html) {
+  const res = {
+    schemaArticle: false, schemaAuteur: false, schemaDatePub: false, schemaDateMaj: false,
+    auteurVisible: false, dateVisible: false,
+    h1: 0, h2: 0, paragraphes: 0, mots: 0, chiffres: 0,
+  };
+  if (!html) return res;
+
+  const blocs = html.match(/<script[^>]+application\/ld\+json[^>]*>[\s\S]*?<\/script>/gi) || [];
+  blocs.forEach(function (b) {
+    const brut = b.replace(/<script[^>]*>/i, "").replace(/<\/script>/i, "").trim();
+    let data;
+    try { data = JSON.parse(brut); } catch (e) { return; }
+    const items = [];
+    (function aplatir(x) {
+      if (!x) return;
+      if (Array.isArray(x)) { x.forEach(aplatir); return; }
+      if (typeof x !== "object") return;
+      items.push(x);
+      if (x["@graph"]) aplatir(x["@graph"]);
+    })(data);
+    items.forEach(function (it) {
+      const t = it["@type"];
+      const types = Array.isArray(t) ? t.join(" ") : String(t || "");
+      if (/Article|NewsArticle|BlogPosting|ReportageNewsArticle/i.test(types)) {
+        res.schemaArticle = true;
+        if (it.author) res.schemaAuteur = true;
+        if (it.datePublished) res.schemaDatePub = true;
+        if (it.dateModified) res.schemaDateMaj = true;
+      }
+    });
+  });
+
+  if (/property=["']article:published_time["']/i.test(html)) res.dateVisible = true;
+  if (/property=["']article:modified_time["']/i.test(html)) res.schemaDateMaj = true;
+  if (/name=["']author["']/i.test(html) || /rel=["']author["']/i.test(html)) res.auteurVisible = true;
+  if (/<time[\s>]/i.test(html)) res.dateVisible = true;
+  if (/class=["'][^"']*(author|auteur|signature|byline)[^"']*["']/i.test(html)) res.auteurVisible = true;
+
+  res.h1 = (html.match(/<h1[\s>]/gi) || []).length;
+  res.h2 = (html.match(/<h2[\s>]/gi) || []).length;
+  res.paragraphes = (html.match(/<p[\s>]/gi) || []).length;
+
+  const texte = texteVisible(html);
+  res.mots = texte ? texte.split(/\s+/).length : 0;
+  res.chiffres = (texte.match(/\b\d[\d\s.,]*\s*(%|euros?|EUR|\u20ac|millions?|milliards?|ans?)\b/gi) || []).length
+               + (texte.match(/\b\d{1,3}([.,]\d+)?\s?%/g) || []).length;
+
+  return res;
+}
+
+async function lireSite(origin) {
+  const rep = await getHTML(origin, 3000);
+  if (!rep) return { dispo: false, raison: "page d'accueil illisible" };
+  const accueil = rep.html;
+
+  let originFinal = origin;
+  try { originFinal = new URL(rep.urlFinale).origin; } catch (e) {}
+
+  const urls = trouverArticles(accueil, originFinal);
+  // En parallele : deux articles coutent le meme temps qu'un seul.
+  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 3000); }));
+  const pages = [];
+  reps.forEach(function (h, i) {
+    if (h) pages.push({ url: urls[i], mesures: analyserPage(h.html), extrait: texteVisible(h.html).slice(0, 700) });
+  });
+
+  if (!pages.length) {
+    return { dispo: false, raison: "aucun article accessible", nbArticles: 0, originFinal: originFinal };
+  }
+
+  const n = pages.length;
+  const agg = pages.reduce(function (a, p) {
+    const m = p.mesures;
+    a.schemaArticle += m.schemaArticle ? 1 : 0;
+    a.schemaAuteur += m.schemaAuteur ? 1 : 0;
+    a.schemaDatePub += m.schemaDatePub ? 1 : 0;
+    a.schemaDateMaj += m.schemaDateMaj ? 1 : 0;
+    a.auteurVisible += m.auteurVisible ? 1 : 0;
+    a.dateVisible += m.dateVisible ? 1 : 0;
+    a.mots += m.mots; a.chiffres += m.chiffres; a.h2 += m.h2; a.paragraphes += m.paragraphes;
+    return a;
+  }, { schemaArticle:0, schemaAuteur:0, schemaDatePub:0, schemaDateMaj:0, auteurVisible:0,
+       dateVisible:0, mots:0, chiffres:0, h2:0, paragraphes:0 });
+
+  return {
+    dispo: true,
+    nbArticles: n,
+    originFinal: originFinal,
+    urls: pages.map(function (p) { return p.url; }),
+    extraits: pages.map(function (p) { return p.extrait; }),
+    balisageArticle: agg.schemaArticle === n ? "present" : (agg.schemaArticle > 0 ? "partiel" : "absent"),
+    auteurBalise: agg.schemaAuteur === n ? "present" : (agg.schemaAuteur > 0 ? "partiel" : "absent"),
+    datePubliee: (agg.schemaDatePub > 0 || agg.dateVisible > 0) ? "present" : "absent",
+    dateMaj: agg.schemaDateMaj > 0 ? "present" : "absent",
+    auteurAffiche: agg.auteurVisible > 0 ? "present" : "absent",
+    motsMoyen: Math.round(agg.mots / n),
+    chiffresMoyen: Math.round((agg.chiffres / n) * 10) / 10,
+    sousTitresMoyen: Math.round(agg.h2 / n),
+  };
+}
+
 // --------- Lecture reelle du robots.txt ---------
 // Les robots IA les plus courants. Libelle = ce qui s'affiche a l'ecran.
 const AI_BOTS = [
@@ -392,6 +563,35 @@ exports.handler = async function (event) {
     "- recos : exactement 6 actions, de la plus prioritaire \u00e0 la moins prioritaire, d\u00e9duites des crit\u00e8res les plus faibles.",
   ].join("\n");
 
+  // --- Mesures reelles : robots.txt et pages du site, en parallele ---
+  const [robots, site] = await Promise.all([readRobots(url), lireSite(origin)]);
+
+  // Domaine inexistant : le DNS ne resout pas.
+  if (robots.joignable === false && !site.dispo) {
+    return {
+      statusCode: 400,
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ error: "Ce domaine est introuvable. Verifiez l'adresse saisie." }),
+    };
+  }
+
+  // Domaine reellement atteint (il peut differer en cas de redirection)
+  let hostFinal = host;
+  try { if (site.originFinal) hostFinal = new URL(site.originFinal).hostname; } catch (e) {}
+  const redirige = hostFinal.replace(/^www\./i, "") !== host.replace(/^www\./i, "");
+
+  let robotsBrief;
+  if (!robots.dispo) {
+    robotsBrief = "Acces des robots IA : non verifiable (" + (robots.raison || "inconnu") + "). N'affirme rien sur ce point.";
+  } else if (robots.nbBloques === 0) {
+    robotsBrief = "Acces des robots IA (verifie dans le robots.txt) : aucun des " + robots.nbTotal +
+      " robots IA courants n'est bloque, l'acces est ouvert.";
+  } else {
+    robotsBrief = "Acces des robots IA (verifie dans le robots.txt) : " + robots.nbBloques + " robots sur " +
+      robots.nbTotal + " sont bloques, a savoir " + robots.listeBloques.join(", ") +
+      ". Ce blocage est tres probablement volontaire (strategie de droits voisins), donc traite-le comme une decision a arbitrer, jamais comme une erreur.";
+  }
+
   // Scores calcules par le code, jamais par le modele
   const calcAIO = site.dispo ? scoreAIO(site) : null;
   const calcLLM = site.dispo ? scoreLLM(site, robots) : null;
@@ -459,7 +659,7 @@ exports.handler = async function (event) {
     //  3. appel simple (dernier recours)
     // Gemini n'accepte pas l'ancrage et le schema simultanement, d'ou la cascade.
     async function callGemini(mode) {
-      const gen = { temperature: 0.7, maxOutputTokens: 8192 };
+      const gen = { temperature: 0.6, maxOutputTokens: 3000 };
       const payload = {
         system_instruction: { parts: [{ text: sys }] },
         contents: [{ role: "user", parts: [{ text: userMsg }] }],
@@ -481,20 +681,13 @@ exports.handler = async function (event) {
       });
     }
 
-    // Si un mode fonctionnel est deja connu, on l'utilise directement : un seul appel.
-    let mode, resp;
-    if (MODE_RETENU) {
-      mode = MODE_RETENU;
-      resp = await callGemini(mode);
-      if (!resp.ok) { MODE_RETENU = null; }   // le mode memorise ne marche plus, on repart en cascade
-    }
-    if (!resp || !resp.ok) {
-      mode = "ancre";
-      resp = await callGemini("ancre");
-      if (!resp.ok) { mode = "schema"; resp = await callGemini("schema"); }
-      if (!resp.ok) { mode = "simple"; resp = await callGemini("simple"); }
-      if (resp.ok) MODE_RETENU = mode;
-    }
+    // Un seul appel au modele. L'ancrage web n'est plus necessaire puisque nous
+    // transmettons de vrais extraits des pages, et il consommait trop de temps
+    // d'execution (Netlify coupe la fonction au-dela de sa limite).
+    // GEMINI_MODE = "ancre" permet de le reactiver si besoin.
+    const mode = MODE_RETENU || "schema";
+    let resp = await callGemini(mode);
+    if (!resp.ok && mode !== "simple") resp = await callGemini("simple");
 
     const json = await resp.json();
 
