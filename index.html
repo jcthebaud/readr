@@ -97,6 +97,10 @@
   .locked{ position:relative; }
   .locked .veil{ filter:blur(5px); opacity:.5; pointer-events:none; user-select:none; }
 
+  .mode{ margin-top:14px; font-size:13px; display:inline-flex; align-items:center; gap:8px;
+    padding:6px 12px; border:1px solid var(--line); color:var(--muted); }
+  .mode.ancre{ border-color:var(--accent); color:var(--accent); font-weight:600; }
+
   .duo{ display:flex; gap:16px; margin-top:26px; flex-wrap:wrap; }
   .card{ flex:1; min-width:250px; border:1.5px solid var(--ink); padding:20px 22px; }
   .card-kicker{ font-size:12px; font-weight:600; color:var(--accent); }
@@ -195,7 +199,7 @@
       <div class="row">
         <div>
           <label class="label" for="url">Adresse de votre site</label>
-          <input id="url" class="input" type="text" placeholder="votremedia.fr" autocomplete="off" />
+          <input id="url" class="input" type="text" placeholder="challenges.fr" autocomplete="off" />
         </div>
         <div>
           <label class="label" for="theme">Th&eacute;matique dominante</label>
@@ -242,6 +246,7 @@
     <div class="rule"></div>
     <div class="site-name" id="r-site"></div>
     <div class="verdict" id="r-verdict"></div>
+    <div class="mode" id="r-mode"></div>
 
     <div class="duo">
       <div class="card">
@@ -358,6 +363,9 @@
   var ROBOTS_OK_0 = "Aucun des {n} robots IA courants n'est bloqu\u00e9 sur votre site.";
   var ROBOTS_OK_N = "{b} robots IA sur {n} sont bloqu\u00e9s sur votre site.";
   var ROBOTS_KO = "Votre fichier robots.txt n'a pas pu \u00eatre lu.";
+  var MODE_ANCRE = "Analyse fond\u00e9e sur une lecture en ligne de votre site";
+  var MODE_ESTIME = "Analyse fond\u00e9e sur la connaissance du m\u00e9dia, sans lecture en ligne";
+  var ERR_DOMAINE = "Indiquez le domaine complet avec son extension, par exemple challenges.fr";
   var PRESENCE = { forte:"Forte", partielle:"Partielle", faible:"Faible" };
   var ACCES = { ouvert:"Ouvert", partiel:"Partiel", restreint:"Restreint", indetermine:"Ind\u00e9termin\u00e9" };
   var MOT_MOYEN = "\u00c0 renforcer";
@@ -397,11 +405,20 @@
   }
   function stopLoading(){ if(loadTimer){ clearInterval(loadTimer); loadTimer=null; } }
 
+  var RE_DOMAINE = /^(?!-)[a-z0-9-]{1,63}(\.(?!-)[a-z0-9-]{1,63})*\.[a-z]{2,24}$/i;
+
   async function analyze(){
     hide("input-error");
     var raw = el("url").value.trim();
     if(!raw) return;
     var clean = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+
+    var host = clean.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0].split(":")[0];
+    if(!RE_DOMAINE.test(host)){
+      el("input-error").textContent = ERR_DOMAINE;
+      show("input-error");
+      return;
+    }
 
     hide("step-input"); show("step-loading"); startLoading();
     window.scrollTo({ top:0, behavior:"smooth" });
@@ -453,6 +470,15 @@
     el("r-llm-why").textContent = llm.raison || "";
     el("r-acces-etat").textContent = ACCES[acc.etat] || ACCES.indetermine;
     el("r-acces-note").textContent = acc.note || "";
+
+    var md = el("r-mode");
+    if(data.mode === "ancre"){
+      md.className = "mode ancre";
+      md.textContent = MODE_ANCRE;
+    } else {
+      md.className = "mode";
+      md.textContent = MODE_ESTIME;
+    }
 
     renderRobots(data.robots);
 
