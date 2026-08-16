@@ -255,26 +255,40 @@ function texteVisible(html) {
 
 // Cherche des liens d'articles plausibles sur la page d'accueil.
 function trouverArticles(html, origin) {
-  const exclus = /\/(tag|tags|category|categories|auteur|author|page|abonnement|abonnez|newsletter|contact|mentions|cgv|cgu|privacy|login|compte|recherche|search|rss|feed)\b/i;
-  const liens = [];
+  const exclus = /\/(tag|tags|category|categories|rubrique|auteur|author|page|abonnement|abonnez|newsletter|contact|mentions|cgv|cgu|privacy|cookies|login|connexion|compte|recherche|search|rss|feed|sitemap|podcast|video|newsletters)\b/i;
+  const forts = [];   // chemins qui ressemblent nettement a un article
+  const faibles = []; // candidats de repli
+
   const re = /<a\s[^>]*href=["']([^"'#]+)["']/gi;
   let m;
-  while ((m = re.exec(html)) !== null && liens.length < 200) {
+  while ((m = re.exec(html)) !== null && (forts.length + faibles.length) < 300) {
     let href = m[1];
     if (!href || href.indexOf("mailto:") === 0 || href.indexOf("javascript:") === 0) continue;
     let abs;
     try { abs = new URL(href, origin).href; } catch (e) { continue; }
     if (abs.indexOf(origin) !== 0) continue;
     if (exclus.test(abs)) continue;
-    const chemin = abs.slice(origin.length);
-    if (chemin.length < 12) continue;
+    if (/\.(jpg|jpeg|png|gif|svg|webp|pdf|zip|mp3|mp4|xml|json|css|js)(\?|$)/i.test(abs)) continue;
+
+    const chemin = abs.slice(origin.length).split("?")[0];
     const segments = chemin.split("/").filter(Boolean);
-    if (segments.length < 1) continue;
+    if (!segments.length) continue;
     const dernier = segments[segments.length - 1];
-    if (dernier.indexOf("-") === -1 && !/\d/.test(dernier)) continue;
-    if (liens.indexOf(abs) === -1) liens.push(abs);
+
+    // Signature nette d'un article : slug avec tirets, ou identifiant numerique, ou date dans l'URL
+    const slug = dernier.indexOf("-") !== -1 && dernier.length >= 10;
+    const identifiant = /\d{4,}/.test(dernier);
+    const date = /\/(19|20)\d{2}\//.test(chemin);
+
+    if ((slug || identifiant || date) && chemin.length >= 10) {
+      if (forts.indexOf(abs) === -1) forts.push(abs);
+    } else if (segments.length >= 2 && chemin.length >= 8) {
+      if (faibles.indexOf(abs) === -1) faibles.push(abs);
+    }
   }
-  return liens.slice(0, 2);
+
+  // On privilegie les candidats nets, puis on complete avec les replis.
+  return forts.concat(faibles).slice(0, 2);
 }
 
 // Analyse une page article et en extrait les signaux mesurables.
