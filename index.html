@@ -445,8 +445,8 @@
   var REDIR = "redirection depuis";
   var TXT_ATTENTE = "Affichage en cours";
   var TXT_BOUTON = "Afficher le rapport complet";
-  var MODE_ANCRE = "Analyse fond\u00e9e sur une lecture en ligne de votre site";
-  var MODE_ESTIME = "Analyse fond\u00e9e sur la connaissance du m\u00e9dia, sans lecture en ligne";
+  var MODE_LU = "Scores calcul\u00e9s sur {n} article(s) lus sur votre site";
+  var MODE_NONLU = "Pages non lisibles, aucun score calcul\u00e9";
   var ERR_DOMAINE = "Indiquez le domaine complet avec son extension, par exemple economist.com";
   var PRESENCE = { forte:"Forte", partielle:"Partielle", faible:"Faible" };
   var ACCES = { ouvert:"Ouvert", partiel:"Partiel", restreint:"Restreint", indetermine:"Ind\u00e9termin\u00e9" };
@@ -546,9 +546,16 @@
 
     el("r-verdict").textContent = data.verdict || "";
 
+    // L'etiquette reflete ce qui a reellement ete lu, pas le mode d'appel du modele.
     var md = el("r-mode");
-    if(data.mode === "ancre"){ md.className = "mode ancre"; md.textContent = MODE_ANCRE; }
-    else { md.className = "mode"; md.textContent = MODE_ESTIME; }
+    var lu = data.site_ && data.site_.dispo;
+    if(lu){
+      md.className = "mode ancre";
+      md.textContent = MODE_LU.replace("{n}", data.site_.nbArticles);
+    } else {
+      md.className = "mode";
+      md.textContent = MODE_NONLU;
+    }
 
     // Site illisible : aucun score n'est affiche, on le dit clairement.
     if(!data.mesurable || !aio || !llm){
