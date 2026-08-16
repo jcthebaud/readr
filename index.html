@@ -245,24 +245,24 @@
 
     <div class="duo">
       <div class="card">
-        <div class="card-kicker">Surface 1</div>
-        <div class="card-title">AI Overview de Google</div>
+        <div class="card-kicker">Dans les r&eacute;sultats Google</div>
+        <div class="card-title">AI Overview</div>
         <div class="card-score"><span id="r-aio-score"></span><span class="den"> / 100</span></div>
         <div class="card-cap">des crit&egrave;res de citation sont couverts</div>
         <div class="card-note" id="r-aio-enjeu"></div>
       </div>
       <div class="card">
-        <div class="card-kicker">Surface 2</div>
+        <div class="card-kicker">En dehors de Google</div>
         <div class="card-title">Assistants IA</div>
         <div class="card-score"><span id="r-llm-score"></span><span class="den"> / 100</span></div>
-        <div class="card-cap">ChatGPT, Perplexity, Gemini, Claude</div>
+        <div class="card-cap">des crit&egrave;res de citation sont couverts</div>
         <div class="card-note" id="r-llm-enjeu"></div>
       </div>
     </div>
 
-    <h2>Surface 1 : ce que Google affiche &agrave; votre place</h2>
-    <p class="h2note">L'AI Overview s'appuie sur l'index de recherche. L'enjeu est un trafic que vous
-      avez d&eacute;j&agrave; et que vous pouvez perdre.</p>
+    <h2>Google AI Overview : ce qui s'affiche &agrave; la place de votre article</h2>
+    <p class="h2note">Le r&eacute;sum&eacute; que Google affiche au-dessus de ses r&eacute;sultats. Il s'appuie sur l'index
+      de recherche, donc sur un trafic que vous avez d&eacute;j&agrave; et que vous pouvez perdre.</p>
     <div class="preview">
       <div class="top">R&eacute;ponse g&eacute;n&eacute;r&eacute;e pour la recherche suivante</div>
       <div class="body">
@@ -275,9 +275,10 @@
       </div>
     </div>
 
-    <h2>Surface 2 : votre pr&eacute;sence aupr&egrave;s des assistants</h2>
-    <p class="h2note">ChatGPT, Perplexity et Gemini ne lisent pas l'index Google. Ils d&eacute;pendent de leurs
-      propres robots et surtout des mentions de votre marque ailleurs sur le web.</p>
+    <h2>Assistants IA : &ecirc;tes-vous cit&eacute; dans leurs r&eacute;ponses ?</h2>
+    <p class="h2note">ChatGPT, Perplexity, Gemini et Claude ne lisent pas l'index Google. Ils d&eacute;pendent
+      de leurs propres robots et surtout des mentions de votre marque ailleurs sur le web. L'enjeu n'est
+      plus le trafic, mais la pr&eacute;sence de votre marque.</p>
     <div class="panel-llm">
       <div class="llm-line"><b>Pr&eacute;sence de marque</b><span id="r-llm-presence"></span></div>
       <div class="llm-why" id="r-llm-why"></div>
@@ -413,7 +414,8 @@
       });
       var payload = null;
       try { payload = await res.json(); } catch(err) { payload = null; }
-      if(!res.ok || !payload || typeof payload.score === "undefined"){
+      var ok = payload && payload.aio && (typeof payload.aio.score === "number" || typeof payload.llm.score === "number");
+      if(!res.ok || !ok){
         var reason = (payload && payload.error) ? payload.error : ("Erreur " + res.status);
         throw new Error(reason);
       }
