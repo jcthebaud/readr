@@ -259,16 +259,20 @@
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ url: clean, topic: el("topic").value.trim() })
       });
-      if(!res.ok) throw new Error("http");
-      data = await res.json();
-      if(!data || typeof data.score === "undefined") throw new Error("format");
+      var payload = null;
+      try { payload = await res.json(); } catch(err) { payload = null; }
+      if(!res.ok || !payload || typeof payload.score === "undefined"){
+        var reason = (payload && payload.error) ? payload.error : ("Erreur " + res.status);
+        throw new Error(reason);
+      }
+      data = payload;
       stopLoading();
       renderResults();
       hide("step-loading"); show("step-results");
     }catch(e){
       stopLoading();
       hide("step-loading"); show("step-input");
-      el("input-error").textContent = "L'analyse n'a pas abouti. Vérifiez l'URL et relancez.";
+      el("input-error").textContent = "L'analyse n'a pas abouti : " + (e.message || "erreur inconnue");
       show("input-error");
     }
   }
