@@ -9,6 +9,17 @@ exports.handler = async function (event) {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
+  // Diagnostic : cle absente = cause n1 des echecs (variable non ajoutee ou site non redeploye).
+  if (!process.env.GEMINI_API_KEY) {
+    return {
+      statusCode: 500,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        error: "Cle GEMINI_API_KEY absente. Ajoutez-la dans les variables d'environnement Netlify, puis relancez un deploiement (Deploys > Trigger deploy > Deploy site).",
+      }),
+    };
+  }
+
   let body;
   try { body = JSON.parse(event.body || "{}"); } catch (e) { body = {}; }
   const url = (body.url || "").trim();
@@ -44,13 +55,24 @@ exports.handler = async function (event) {
       body: JSON.stringify({
         system_instruction: { parts: [{ text: sys }] },
         contents: [{ role: "user", parts: [{ text: userMsg }] }],
-        // Ancrage sur Google Search : cohérent pour un outil de visibilité Google.
-        // 5000 requetes ancrees gratuites par mois. Retirez cette ligne "tools" pour desactiver.
+        // Ancrage sur Google Search. Si Gemini renvoie une erreur liee a cet outil,
+        // supprimez la ligne "tools" ci-dessous.
         tools: [{ google_search: {} }],
       }),
     });
 
     const json = await resp.json();
+
+    // Diagnostic : si Gemini refuse, on renvoie son message exact (modele inconnu, cle invalide, etc.).
+    if (!resp.ok) {
+      const detail = json && json.error && json.error.message ? json.error.message : "HTTP " + resp.status;
+      return {
+        statusCode: 502,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ error: "Erreur Gemini : " + detail }),
+      };
+    }
+
     const parts =
       (json.candidates &&
         json.candidates[0] &&
@@ -60,15 +82,25 @@ exports.handler = async function (event) {
 
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    if (start === -1 || end === -1) throw new Error("no-json");
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    if (start === -1 || end === -1) {
+      return {
+        statusCode: 502,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ error: "Reponse Gemini illisible (pas de JSON). Debut: " + text.slice(0, 160) }),
+      };
+    }
 
+    const parsed = JSON.parse(text.slice(start, end + 1));
     return {
       statusCode: 200,
       headers: { "content-type": "application/json" },
       body: JSON.stringify(parsed),
     };
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: "analyse impossible" }) };
+    return {
+      statusCode: 500,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ error: "Exception fonction : " + (e && e.message ? e.message : String(e)) }),
+    };
   }
 };
