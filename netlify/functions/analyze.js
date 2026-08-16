@@ -20,52 +20,27 @@ const SCHEMA = {
     aio: {
       type: "OBJECT",
       properties: {
-        score: { type: "INTEGER" },
         enjeu: { type: "STRING" },
         requete: { type: "STRING" },
         apercu: { type: "STRING" },
-        citation: {
-          type: "OBJECT",
-          properties: {
-            verdict: { type: "STRING", enum: ["probable", "partielle", "improbable"] },
-            raison: { type: "STRING" },
-          },
-          required: ["verdict", "raison"],
-        },
+        citationRaison: { type: "STRING" },
       },
-      required: ["score", "enjeu", "requete", "apercu", "citation"],
+      required: ["enjeu", "requete", "apercu", "citationRaison"],
     },
     llm: {
       type: "OBJECT",
       properties: {
-        score: { type: "INTEGER" },
         enjeu: { type: "STRING" },
-        presence: { type: "STRING", enum: ["forte", "partielle", "faible"] },
         raison: { type: "STRING" },
-        acces: {
-          type: "OBJECT",
-          properties: {
-            etat: { type: "STRING", enum: ["ouvert", "partiel", "restreint", "indetermine"] },
-            note: { type: "STRING" },
-          },
-          required: ["etat", "note"],
-        },
       },
-      required: ["score", "enjeu", "presence", "raison", "acces"],
+      required: ["enjeu", "raison"],
     },
-    signaux: {
+    explications: {
       type: "ARRAY",
       items: {
         type: "OBJECT",
-        properties: {
-          nom: { type: "STRING" },
-          perimetre: { type: "STRING", enum: ["Google AI Overview", "Assistants IA", "Les deux"] },
-          etat: { type: "STRING", enum: ["fort", "moyen", "faible"] },
-          constat: { type: "STRING" },
-          enjeu: { type: "STRING" },
-          action: { type: "STRING" },
-        },
-        required: ["nom", "perimetre", "etat", "constat", "enjeu", "action"],
+        properties: { enjeu: { type: "STRING" }, action: { type: "STRING" } },
+        required: ["enjeu", "action"],
       },
     },
     recos: {
@@ -84,37 +59,154 @@ const SCHEMA = {
       },
     },
   },
-  required: ["site", "verdict", "aio", "llm", "signaux", "recos"],
+  required: ["site", "verdict", "aio", "llm", "explications", "recos"],
 };
 
-// --------- Filet de securite : rattrape une reponse mal formee ---------
-function normalise(d) {
-  if (!d || typeof d !== "object") return null;
-  d.aio = d.aio || {};
-  d.llm = d.llm || {};
-  // ancien format a plat : un score unique au premier niveau
-  if (typeof d.aio.score !== "number" && typeof d.score === "number") d.aio.score = d.score;
-  if (typeof d.llm.score !== "number" && typeof d.score === "number") d.llm.score = d.score;
-  if (typeof d.aio.requete !== "string" && typeof d.requete === "string") d.aio.requete = d.requete;
-  if (typeof d.aio.apercu !== "string" && typeof d.apercuIA === "string") d.aio.apercu = d.apercuIA;
-  if (!d.aio.citation && d.citation) d.aio.citation = d.citation;
-  if (typeof d.aio.enjeu !== "string" && typeof d.enjeu === "string") d.aio.enjeu = d.enjeu;
-  d.llm.acces = d.llm.acces || { etat: "indetermine", note: "" };
-  d.signaux = Array.isArray(d.signaux) ? d.signaux : [];
-  d.recos = Array.isArray(d.recos) ? d.recos : [];
-  // un diagnostic sans aucun score exploitable n'est pas affichable
-  if (typeof d.aio.score !== "number" && typeof d.llm.score !== "number") return null;
-  return d;
+// --------- Assemblage : mesures calculees + redaction du modele ---------
+function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, redirige, mode) {
+  const d = (txt && typeof txt === "object") ? txt : {};
+  const aio = d.aio || {};
+  const llm = d.llm || {};
+  const expl = Array.isArray(d.explications) ? d.explications : [];
+
+  // Les signaux combinent le constat mesure et l'explication redigee.
+  const signaux = criteres.map(function (c, i) {
+    return {
+      nom: c.nom,
+      perimetre: c.perimetre,
+      etat: c.etat,
+      constat: c.constat,
+      enjeu: (expl[i] && expl[i].enjeu) || "",
+      action: (expl[i] && expl[i].action) || "",
+      obtenu: c.obtenu,
+      max: c.max,
+    };
+  });
+
+  return {
+    site: d.site || "",
+    verdict: d.verdict || "",
+    mesurable: !!calcAIO,
+    aio: calcAIO ? {
+      score: calcAIO.score,
+      detail: calcAIO.detail,
+      enjeu: aio.enjeu || "",
+      requete: aio.requete || "",
+      apercu: aio.apercu || "",
+      citation: { verdict: verdictCitation(calcAIO.score), raison: aio.citationRaison || "" },
+    } : null,
+    llm: calcLLM ? {
+      score: calcLLM.score,
+      detail: calcLLM.detail,
+      enjeu: llm.enjeu || "",
+      presence: niveauPresence(calcLLM.score),
+      raison: llm.raison || "",
+      acces: { etat: robots && robots.dispo
+                 ? (robots.nbBloques === 0 ? "ouvert" : (robots.nbBloques >= robots.nbTotal - 1 ? "restreint" : "partiel"))
+                 : "indetermine",
+               note: "" },
+    } : null,
+    signaux: signaux,
+    recos: Array.isArray(d.recos) ? d.recos : [],
+    robots: robots,
+    site_: site,
+    hostFinal: hostFinal,
+    redirige: redirige,
+    mode: mode,
+  };
 }
 
 
-// --------- Validation du domaine ---------
-// Rejette les saisies qui ne sont pas des noms de domaine (ex : "challenges").
-function domaineValide(host) {
-  if (!host) return false;
-  if (host.length > 253) return false;
-  // au moins un point, des libelles valides, une extension de 2 a 24 lettres
-  return /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*\.[a-z]{2,24}$/i.test(host);
+// --------- Grille de scoring deterministe ---------
+// Le score est CALCULE a partir des mesures, jamais produit par le modele.
+// Meme site analyse deux fois = meme score. La grille est explicite et opposable.
+
+function pts(valeur, paliers) {
+  // paliers : [[seuil, points], ...] du plus haut au plus bas
+  for (let i = 0; i < paliers.length; i++) {
+    if (valeur >= paliers[i][0]) return paliers[i][1];
+  }
+  return 0;
+}
+
+function etatVers(v, plein, moitie) {
+  if (v === "present") return plein;
+  if (v === "partiel") return moitie;
+  return 0;
+}
+
+// Score Google AI Overview : entierement mesurable sur les pages.
+function scoreAIO(m) {
+  const d = [];
+  d.push({ critere: "Balisage Article ou NewsArticle", obtenu: etatVers(m.balisageArticle, 20, 10), max: 20,
+           constat: m.balisageArticle === "present" ? "Present sur les articles analyses"
+                  : (m.balisageArticle === "partiel" ? "Present sur une partie des articles" : "Absent des articles analyses") });
+  d.push({ critere: "Auteur declare dans les donnees structurees", obtenu: etatVers(m.auteurBalise, 15, 8), max: 15,
+           constat: m.auteurBalise === "present" ? "Champ auteur renseigne"
+                  : (m.auteurBalise === "partiel" ? "Champ auteur renseigne par intermittence" : "Champ auteur absent") });
+  d.push({ critere: "Date de publication declaree", obtenu: etatVers(m.datePubliee, 10, 5), max: 10,
+           constat: m.datePubliee === "present" ? "Date de publication presente" : "Date de publication absente" });
+  d.push({ critere: "Date de mise a jour declaree", obtenu: etatVers(m.dateMaj, 15, 8), max: 15,
+           constat: m.dateMaj === "present" ? "Date de modification presente" : "Date de modification absente" });
+  d.push({ critere: "Signature visible sur la page", obtenu: etatVers(m.auteurAffiche, 5, 3), max: 5,
+           constat: m.auteurAffiche === "present" ? "Signature affichee" : "Aucune signature reperee" });
+  d.push({ critere: "Donnees chiffrees par article", obtenu: pts(m.chiffresMoyen, [[4,15],[3,12],[2,9],[1,5]]), max: 15,
+           constat: m.chiffresMoyen + " donnee(s) chiffree(s) en moyenne" });
+  d.push({ critere: "Sous-titres par article", obtenu: pts(m.sousTitresMoyen, [[5,10],[3,7],[1,4]]), max: 10,
+           constat: m.sousTitresMoyen + " sous-titre(s) en moyenne" });
+  d.push({ critere: "Longueur des articles", obtenu: pts(m.motsMoyen, [[1200,10],[600,8],[300,5]]), max: 10,
+           constat: m.motsMoyen + " mots en moyenne" });
+
+  const total = d.reduce(function (a, x) { return a + x.obtenu; }, 0);
+  return { score: total, detail: d };
+}
+
+// Score Assistants IA : part mesurable uniquement.
+// Les mentions de la marque hors du site ne sont pas mesurables ici, c'est assume et affiche.
+function scoreLLM(m, robots) {
+  const d = [];
+
+  let ptsAcces = 0, constatAcces;
+  if (robots && robots.dispo) {
+    const ouverts = robots.nbTotal - robots.nbBloques;
+    ptsAcces = Math.round((ouverts / robots.nbTotal) * 40);
+    constatAcces = ouverts + " robot(s) IA sur " + robots.nbTotal + " ont acces au site";
+  } else {
+    constatAcces = "Fichier robots.txt non lisible, acces non verifiable";
+  }
+  d.push({ critere: "Acces des robots IA", obtenu: ptsAcces, max: 40, constat: constatAcces });
+
+  d.push({ critere: "Auteur declare dans les donnees structurees", obtenu: etatVers(m.auteurBalise, 20, 10), max: 20,
+           constat: m.auteurBalise === "present" ? "Auteur identifiable par les machines" : "Auteur non identifiable par les machines" });
+  d.push({ critere: "Balisage Article ou NewsArticle", obtenu: etatVers(m.balisageArticle, 15, 8), max: 15,
+           constat: m.balisageArticle === "present" ? "Contenu identifie comme article" : "Contenu non identifie comme article" });
+  d.push({ critere: "Date de mise a jour declaree", obtenu: etatVers(m.dateMaj, 10, 5), max: 10,
+           constat: m.dateMaj === "present" ? "Actualisation explicite" : "Actualisation non declaree" });
+  d.push({ critere: "Longueur des articles", obtenu: pts(m.motsMoyen, [[1200,15],[600,11],[300,6]]), max: 15,
+           constat: m.motsMoyen + " mots en moyenne" });
+
+  const total = d.reduce(function (a, x) { return a + x.obtenu; }, 0);
+  return { score: total, detail: d };
+}
+
+// Etat d'un critere a partir du taux d'obtention
+function etatCritere(obtenu, max) {
+  const r = max ? obtenu / max : 0;
+  if (r >= 0.75) return "fort";
+  if (r >= 0.4) return "moyen";
+  return "faible";
+}
+
+// Verdict de citation deduit du score, pas invente.
+function verdictCitation(score) {
+  if (score >= 70) return "probable";
+  if (score >= 45) return "partielle";
+  return "improbable";
+}
+function niveauPresence(score) {
+  if (score >= 70) return "forte";
+  if (score >= 45) return "partielle";
+  return "faible";
 }
 
 // --------- Lecture reelle du robots.txt ---------
@@ -255,14 +347,14 @@ exports.handler = async function (event) {
     return {
       statusCode: 400,
       headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ error: "Adresse invalide. Indiquez un domaine complet, par exemple challenges.fr" }),
+      body: JSON.stringify({ error: "Adresse invalide. Indiquez un domaine complet, par exemple economist.com" }),
     };
   }
   if (!domaineValide(host)) {
     return {
       statusCode: 400,
       headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ error: "Adresse incompl\u00e8te. Indiquez le domaine avec son extension, par exemple challenges.fr" }),
+      body: JSON.stringify({ error: "Adresse incompl\u00e8te. Indiquez le domaine avec son extension, par exemple economist.com" }),
     };
   }
 
@@ -270,60 +362,92 @@ exports.handler = async function (event) {
 
   const sys = [
     "Tu es consultant senior en visibilit\u00e9 des contenus dans les moteurs de r\u00e9ponse IA.",
-    "Tes interlocuteurs sont des directions marketing et produit de m\u00e9dias fran\u00e7ais. Ils connaissent le SEO, l'audience, l'abonnement. Ils ne connaissent pas le jargon GEO.",
+    "Tes interlocuteurs sont des directions marketing et produit de m\u00e9dias fran\u00e7ais. Ils connaissent le SEO, l'audience et l'abonnement, pas le jargon GEO.",
     "",
-    "Tu distingues STRICTEMENT deux environnements, qui ne fonctionnent pas de la m\u00eame mani\u00e8re :",
-    "1. GOOGLE AI OVERVIEW : le r\u00e9sum\u00e9 g\u00e9n\u00e9r\u00e9 au-dessus des r\u00e9sultats de recherche. Il s'appuie sur l'index Google. Les leviers restent proches du SEO : indexation, structure, donn\u00e9es structur\u00e9es, autorit\u00e9 de la page, fra\u00eecheur. L'enjeu business est une PERTE de trafic existant, mesurable dans leurs outils.",
-    "2. ASSISTANTS IA (ChatGPT, Perplexity, Gemini en application, Claude) : r\u00e9ponses hors moteur de recherche. Ils d\u00e9pendent de leurs propres robots, de leurs donn\u00e9es d'entra\u00eenement et surtout des MENTIONS de la marque ailleurs sur le web (earned media, citations par des tiers, pr\u00e9sence dans les sources de r\u00e9f\u00e9rence). L'enjeu business est une PR\u00c9SENCE DE MARQUE sur un espace nouveau, pas une perte de trafic.",
+    "R\u00c8GLE ABSOLUE : tu ne produis AUCUN chiffre, AUCUN score, AUCUN \u00e9tat de crit\u00e8re.",
+    "Les scores et les constats te sont fournis, ils ont \u00e9t\u00e9 mesur\u00e9s sur les pages du site.",
+    "Ton r\u00f4le est uniquement d'expliquer ce que ces mesures impliquent et de recommander des actions.",
+    "Ne contredis jamais une mesure fournie. N'invente aucune donn\u00e9e qui ne t'a pas \u00e9t\u00e9 transmise.",
+    "Si une information ne t'a pas \u00e9t\u00e9 fournie, ne l'invente pas et reste sur ce que tu sais.",
     "",
-    "Point de vigilance important : de nombreux \u00e9diteurs fran\u00e7ais bloquent volontairement les robots IA (GPTBot, Google-Extended, PerplexityBot, ClaudeBot, CCBot) dans le cadre des n\u00e9gociations sur les droits voisins. Une absence dans les assistants peut donc \u00eatre un CHOIX STRAT\u00c9GIQUE et non un d\u00e9faut. Tu dois envisager cette hypoth\u00e8se et ne jamais pr\u00e9senter un blocage volontaire comme une erreur.",
+    "Tu distingues deux environnements :",
+    "1. GOOGLE AI OVERVIEW : le r\u00e9sum\u00e9 au-dessus des r\u00e9sultats de recherche, adoss\u00e9 \u00e0 l'index Google. Enjeu business : une perte de trafic existant.",
+    "2. ASSISTANTS IA (ChatGPT, Perplexity, Gemini, Claude) : hors moteur de recherche, d\u00e9pendants de leurs propres robots et des mentions de la marque ailleurs sur le web. Enjeu business : la pr\u00e9sence de marque.",
     "",
-    "R\u00c8GLES DE R\u00c9DACTION, \u00e0 respecter imp\u00e9rativement :",
-    "- R\u00e9dige en fran\u00e7ais soutenu et professionnel, avec TOUS les accents correctement plac\u00e9s : \u00e9, \u00e8, \u00ea, \u00e0, \u00f9, \u00e7, \u00ee, \u00f4. Un texte sans accents est consid\u00e9r\u00e9 comme une r\u00e9ponse invalide.",
-    "- Vouvoiement syst\u00e9matique.",
-    "- Interdiction absolue du tiret cadratin et du tiret demi-cadratin. Utilise la virgule, les deux-points ou les parenth\u00e8ses.",
-    "- Pas de superlatifs marketing, pas de formules creuses du type r\u00e9volution ou incontournable.",
-    "- Chaque constat doit \u00eatre concret et v\u00e9rifiable.",
+    "Point de vigilance : de nombreux \u00e9diteurs fran\u00e7ais bloquent volontairement les robots IA dans le cadre des n\u00e9gociations sur les droits voisins. Un acc\u00e8s restreint peut donc \u00eatre un choix strat\u00e9gique, jamais une erreur technique.",
     "",
-    "Structure des contenus attendus :",
-    "- signaux : exactement 6 entr\u00e9es. Trois qui concernent surtout Google AI Overview (structure et lisibilit\u00e9 machine, donn\u00e9es et chiffres cit\u00e9s, fra\u00eecheur et mise \u00e0 jour). Trois qui concernent surtout les assistants (autorit\u00e9 et signature, mentions de la marque hors de votre site, profondeur th\u00e9matique).",
-    "- recos : exactement 6 entr\u00e9es, de la plus prioritaire \u00e0 la moins prioritaire, avec un \u00e9quilibre entre les deux environnements.",
-    "- Les recommandations doivent \u00eatre applicables par une r\u00e9daction ou une \u00e9quipe produit de m\u00e9dia, pas par un expert technique isol\u00e9.",
-    "- verdict : une phrase de 18 mots maximum r\u00e9sumant la situation sur les deux environnements.",
+    "R\u00c8GLES DE R\u00c9DACTION :",
+    "- Fran\u00e7ais professionnel, tous les accents correctement plac\u00e9s. Vouvoiement.",
+    "- Interdiction absolue du tiret cadratin et du tiret demi-cadratin.",
+    "- Pas de superlatifs marketing, pas de formules creuses.",
+    "- Chaque phrase apporte une information utile.",
+    "",
+    "Contenus attendus :",
+    "- verdict : une phrase de 18 mots maximum, coh\u00e9rente avec les deux scores fournis.",
     "- aio.enjeu et llm.enjeu : deux phrases chacun, exprim\u00e9es en trafic, audience et abonnement.",
-    "- aio.requete : une question r\u00e9elle qu'un lecteur taperait sur Google dans cette th\u00e9matique.",
+    "- aio.requete : une question r\u00e9elle qu'un lecteur taperait sur Google, en lien avec les extraits fournis.",
     "- aio.apercu : la r\u00e9ponse que produirait un AI Overview \u00e0 cette question, en trois phrases.",
+    "- aio.citationRaison et llm.raison : une phrase chacune, appuy\u00e9e sur les mesures fournies.",
+    "- explications : exactement autant d'entr\u00e9es que de crit\u00e8res fournis, dans le M\u00caME ORDRE. Pour chacune, pourquoi ce crit\u00e8re compte pour la citation (une phrase) et l'action \u00e0 mener (une phrase op\u00e9rationnelle).",
+    "- recos : exactement 6 actions, de la plus prioritaire \u00e0 la moins prioritaire, d\u00e9duites des crit\u00e8res les plus faibles.",
   ].join("\n");
 
-  // Une seule requete sortante : elle verifie l'existence du domaine ET lit le robots.txt.
-  const robots = await readRobots(url);
-  if (robots.joignable === false) {
-    return {
-      statusCode: 400,
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ error: "Ce domaine est introuvable. V\u00e9rifiez l'adresse saisie." }),
-    };
-  }
+  // Scores calcules par le code, jamais par le modele
+  const calcAIO = site.dispo ? scoreAIO(site) : null;
+  const calcLLM = site.dispo ? scoreLLM(site, robots) : null;
 
-  let robotsBrief;
-  if (!robots.dispo) {
-    robotsBrief = "Acc\u00e8s des robots IA : non v\u00e9rifiable (" + (robots.raison || "inconnu") + "). Reste prudent, n'affirme rien sur ce point.";
-  } else if (robots.nbBloques === 0) {
-    robotsBrief = "Acc\u00e8s des robots IA (v\u00e9rifi\u00e9 dans le fichier robots.txt) : aucun des " + robots.nbTotal +
-      " robots IA courants n'est bloqu\u00e9. L'acc\u00e8s est ouvert.";
-  } else {
-    robotsBrief = "Acc\u00e8s des robots IA (v\u00e9rifi\u00e9 dans le fichier robots.txt) : " + robots.nbBloques + " robots sur " +
-      robots.nbTotal + " sont bloqu\u00e9s, \u00e0 savoir " + robots.listeBloques.join(", ") +
-      ". Ce blocage est tr\u00e8s probablement volontaire (strat\u00e9gie de droits voisins ou n\u00e9gociation de licence), " +
-      "donc traite-le comme une d\u00e9cision \u00e0 arbitrer et jamais comme une erreur technique.";
-  }
+  // Criteres consolides. On ne fait expliquer que les points perfectibles,
+  // dedupliques, classes par nombre de points perdus, et limites a 6.
+  const tous = [];
+  if (calcAIO) calcAIO.detail.forEach(function (d) {
+    tous.push({ nom: d.critere, perimetre: "Google AI Overview", etat: etatCritere(d.obtenu, d.max),
+                constat: d.constat, obtenu: d.obtenu, max: d.max });
+  });
+  if (calcLLM) calcLLM.detail.forEach(function (d) {
+    tous.push({ nom: d.critere, perimetre: "Assistants IA", etat: etatCritere(d.obtenu, d.max),
+                constat: d.constat, obtenu: d.obtenu, max: d.max });
+  });
+
+  // un critere present dans les deux grilles concerne les deux environnements
+  const compte = {};
+  tous.forEach(function (c) { const k = c.nom.toLowerCase(); compte[k] = (compte[k] || 0) + 1; });
+
+  const vus = {};
+  const criteres = tous
+    .filter(function (c) {
+      if (c.etat === "fort") return false;
+      const cle = c.nom.toLowerCase();
+      if (vus[cle]) return false;
+      vus[cle] = true;
+      if (compte[cle] > 1) c.perimetre = "Les deux";
+      return true;
+    })
+    .sort(function (a, b) { return (b.max - b.obtenu) - (a.max - a.obtenu); })
+    .slice(0, 6);
+
+  const listeCriteres = criteres.map(function (c, i) {
+    return (i + 1) + ". " + c.nom + " (" + c.perimetre + ") : " + c.constat +
+           " [" + c.obtenu + " points sur " + c.max + ", niveau " + c.etat + "]";
+  }).join(" ");
+
+  const extraits = (site.dispo && site.extraits && site.extraits.length)
+    ? " EXTRAITS REELS de vos articles, a utiliser pour comprendre le sujet traite : " +
+      site.extraits.map(function (e, i) { return "Article " + (i + 1) + " : " + e; }).join(" ")
+    : "";
+
+  const scoresBrief = calcAIO
+    ? "SCORES CALCULES, a reprendre tels quels : Google AI Overview " + calcAIO.score + " sur 100, " +
+      "Assistants IA " + calcLLM.score + " sur 100. "
+    : "Les pages du site n'ont pas pu etre lues, aucun score n'a pu etre calcule. Reste tres prudent. ";
 
   const userMsg =
-    "Site \u00e0 analyser : " + url + ". " +
-    (theme ? "Th\u00e9matique principale : " + theme + ". " : "") +
+    "Site analyse : " + (redirige ? ("https://" + hostFinal + " (le domaine saisi " + host + " redirige vers celui-ci)") : url) + ". " +
+    (theme ? "Thematique principale : " + theme + ". " : "") +
+    scoresBrief +
+    (criteres.length ? ("CRITERES MESURES, dans l'ordre, a expliquer un par un : " + listeCriteres + " ") : "") +
     robotsBrief + " " +
-    "Dans llm.acces, reprends fid\u00e8lement ce constat v\u00e9rifi\u00e9 sans le contredire. " +
-    "R\u00e9dige l'int\u00e9gralit\u00e9 du diagnostic en fran\u00e7ais correctement accentu\u00e9.";
+    extraits +
+    " Redige uniquement les explications et les recommandations demandees, en francais accentue.";
 
   try {
     const endpoint =
@@ -398,21 +522,23 @@ exports.handler = async function (event) {
       };
     }
 
-    const parsed = normalise(JSON.parse(text.slice(start, end + 1)));
-    if (!parsed) {
-      return {
-        statusCode: 502,
-        headers: { "content-type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ error: "Le diagnostic est revenu incomplet. Relancez l'analyse." }),
-      };
+    const brut = JSON.parse(text.slice(start, end + 1));
+    const resultat = assembler(brut, calcAIO, calcLLM, criteres, robots, site, hostFinal, redirige, mode);
+
+    // La note d'acces des robots reste factuelle, elle n'est pas redigee par le modele.
+    if (resultat.llm) {
+      resultat.llm.acces.note = robots && robots.dispo
+        ? (robots.nbBloques === 0
+            ? "Aucun robot IA n'est bloque dans votre fichier robots.txt."
+            : robots.nbBloques + " robot(s) IA sur " + robots.nbTotal + " sont bloques : " +
+              robots.listeBloques.join(", ") + ". Un blocage volontaire releve d'un arbitrage de droits voisins avant d'etre un sujet technique.")
+        : "Votre fichier robots.txt n'a pas pu etre lu, l'acces des robots IA n'est pas verifiable.";
     }
-    parsed.robots = robots;
-    parsed.mode = mode;
 
     return {
       statusCode: 200,
       headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify(parsed),
+      body: JSON.stringify(resultat),
     };
   } catch (e) {
     return {
