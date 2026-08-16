@@ -1,0 +1,6 @@
+# Configuration Netlify : site statique + fonctions serverless.
+# Aucune commande de build (le site est du HTML simple).
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
