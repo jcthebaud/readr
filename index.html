@@ -90,6 +90,9 @@
   .calc-pts.plein{ color:#1B7F3B; } .calc-pts.partiel{ color:#9A6200; } .calc-pts.vide{ color:#B0202A; }
   .calc-note{ margin-top:14px; font-size:12.5px; color:var(--muted); }
 
+  .nonmes-plus{ margin-top:8px; font-size:13.5px; color:var(--muted); }
+  #nonmes-raison{ margin-top:6px; }
+
   .nonmes{ margin-top:26px; border-left:3px solid var(--accent); background:var(--tint); padding:18px 22px;
     font-size:14.5px; line-height:1.55; }
 
@@ -324,9 +327,12 @@
     </div>
 
     <!-- Rapport verrouill&eacute; -->
-    <div id="nonmes" class="nonmes hidden">Les pages de ce site n'ont pas pu &ecirc;tre lues, probablement
-      parce qu'il refuse les requ&ecirc;tes automatiques. Aucun score n'est calcul&eacute; : nous pr&eacute;f&eacute;rons ne rien
-      afficher plut&ocirc;t qu'une estimation. Les &eacute;l&eacute;ments ci-dessous restent indicatifs.</div>
+    <div id="nonmes" class="nonmes hidden">
+      <b>Aucun score n'a pu &ecirc;tre calcul&eacute;.</b>
+      <div id="nonmes-raison"></div>
+      <div class="nonmes-plus">Nous pr&eacute;f&eacute;rons ne rien afficher plut&ocirc;t qu'une estimation. Le reste du
+        rapport s'appuie uniquement sur ce qui a pu &ecirc;tre v&eacute;rifi&eacute;.</div>
+    </div>
 
     <div id="rapport" class="veil">
       <h2>Google AI Overview : ce qui s'affiche &agrave; la place de votre article</h2>
@@ -441,6 +447,12 @@
   var ROBOTS_OK_0 = "Aucun des {n} robots IA courants n'est bloqu\u00e9 sur votre site.";
   var ROBOTS_OK_N = "{b} robots IA sur {n} sont bloqu\u00e9s sur votre site.";
   var ROBOTS_KO = "Votre fichier robots.txt n'a pas pu \u00eatre lu.";
+  var RAISONS = {
+    "page d'accueil illisible": "Votre site a refus\u00e9 notre requ\u00eate de lecture, ce qui arrive avec certaines protections anti-robots.",
+    "aucun article accessible": "Nous avons atteint votre site mais n'avons pas pu identifier d'article \u00e0 analyser depuis la page d'accueil.",
+    "robots.txt inaccessible": "Votre site a refus\u00e9 notre requ\u00eate de lecture."
+  };
+  var RAISON_DEFAUT = "Vos pages n'ont pas pu \u00eatre lues automatiquement.";
   var PTS_PERDUS = "points perdus";
   var REDIR = "redirection depuis";
   var TXT_ATTENTE = "Affichage en cours";
@@ -515,8 +527,8 @@
       });
       var payload = null;
       try { payload = await res.json(); } catch(err) { payload = null; }
-      var ok = payload && payload.aio && (typeof payload.aio.score === "number" || typeof payload.llm.score === "number");
-      if(!res.ok || !ok){
+      // Un diagnostic non mesurable est une reponse valide : la page l'affiche telle quelle.
+      if(!res.ok || !payload || payload.error){
         var reason = (payload && payload.error) ? payload.error : ("Erreur " + res.status);
         throw new Error(reason);
       }
@@ -563,6 +575,8 @@
       el("r-llm-score").textContent = "\u2013";
       el("r-aio-enjeu").textContent = "";
       el("r-llm-enjeu").textContent = "";
+      var raison = (data.site_ && data.site_.raison) ? data.site_.raison : "";
+      el("nonmes-raison").textContent = RAISONS[raison] || RAISON_DEFAUT;
       el("nonmes").classList.remove("hidden");
     } else {
       hide("nonmes");
