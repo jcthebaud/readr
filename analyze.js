@@ -4,6 +4,103 @@
 
 const MODEL = "gemini-3.5-flash-lite";
 
+
+// --------- Schema impose : Gemini ne peut plus devier du format ---------
+const SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    site: { type: "STRING" },
+    verdict: { type: "STRING" },
+    aio: {
+      type: "OBJECT",
+      properties: {
+        score: { type: "INTEGER" },
+        enjeu: { type: "STRING" },
+        requete: { type: "STRING" },
+        apercu: { type: "STRING" },
+        citation: {
+          type: "OBJECT",
+          properties: {
+            verdict: { type: "STRING", enum: ["probable", "partielle", "improbable"] },
+            raison: { type: "STRING" },
+          },
+          required: ["verdict", "raison"],
+        },
+      },
+      required: ["score", "enjeu", "requete", "apercu", "citation"],
+    },
+    llm: {
+      type: "OBJECT",
+      properties: {
+        score: { type: "INTEGER" },
+        enjeu: { type: "STRING" },
+        presence: { type: "STRING", enum: ["forte", "partielle", "faible"] },
+        raison: { type: "STRING" },
+        acces: {
+          type: "OBJECT",
+          properties: {
+            etat: { type: "STRING", enum: ["ouvert", "partiel", "restreint", "indetermine"] },
+            note: { type: "STRING" },
+          },
+          required: ["etat", "note"],
+        },
+      },
+      required: ["score", "enjeu", "presence", "raison", "acces"],
+    },
+    signaux: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          nom: { type: "STRING" },
+          perimetre: { type: "STRING", enum: ["Google AI Overview", "Assistants IA", "Les deux"] },
+          etat: { type: "STRING", enum: ["fort", "moyen", "faible"] },
+          constat: { type: "STRING" },
+          enjeu: { type: "STRING" },
+          action: { type: "STRING" },
+        },
+        required: ["nom", "perimetre", "etat", "constat", "enjeu", "action"],
+      },
+    },
+    recos: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          titre: { type: "STRING" },
+          perimetre: { type: "STRING", enum: ["Google AI Overview", "Assistants IA", "Les deux"] },
+          detail: { type: "STRING" },
+          impact: { type: "STRING", enum: ["fort", "moyen"] },
+          delai: { type: "STRING", enum: ["court terme", "moyen terme"] },
+          responsable: { type: "STRING", enum: ["Redaction", "Technique", "Marketing", "Produit"] },
+        },
+        required: ["titre", "perimetre", "detail", "impact", "delai", "responsable"],
+      },
+    },
+  },
+  required: ["site", "verdict", "aio", "llm", "signaux", "recos"],
+};
+
+// --------- Filet de securite : rattrape une reponse mal formee ---------
+function normalise(d) {
+  if (!d || typeof d !== "object") return null;
+  d.aio = d.aio || {};
+  d.llm = d.llm || {};
+  // ancien format a plat : un score unique au premier niveau
+  if (typeof d.aio.score !== "number" && typeof d.score === "number") d.aio.score = d.score;
+  if (typeof d.llm.score !== "number" && typeof d.score === "number") d.llm.score = d.score;
+  if (typeof d.aio.requete !== "string" && typeof d.requete === "string") d.aio.requete = d.requete;
+  if (typeof d.aio.apercu !== "string" && typeof d.apercuIA === "string") d.aio.apercu = d.apercuIA;
+  if (!d.aio.citation && d.citation) d.aio.citation = d.citation;
+  if (typeof d.aio.enjeu !== "string" && typeof d.enjeu === "string") d.aio.enjeu = d.enjeu;
+  d.llm.acces = d.llm.acces || { etat: "indetermine", note: "" };
+  d.signaux = Array.isArray(d.signaux) ? d.signaux : [];
+  d.recos = Array.isArray(d.recos) ? d.recos : [];
+  // un diagnostic sans aucun score exploitable n'est pas affichable
+  if (typeof d.aio.score !== "number" && typeof d.llm.score !== "number") return null;
+  return d;
+}
+
 // --------- Lecture reelle du robots.txt ---------
 // Les robots IA les plus courants. Libelle = ce qui s'affiche a l'ecran.
 const AI_BOTS = [
@@ -133,7 +230,7 @@ exports.handler = async function (event) {
     "Tu es consultant senior en visibilite des contenus dans les moteurs de reponse IA.",
     "Tes interlocuteurs sont des directions marketing et produit de medias francais. Ils connaissent le SEO, l'audience, l'abonnement. Ils ne connaissent pas le jargon GEO.",
     "",
-    "Tu distingues STRICTEMENT deux surfaces, qui ne fonctionnent pas de la meme maniere :",
+    "Tu distingues STRICTEMENT deux environnements, qui ne fonctionnent pas de la meme maniere :",
     "1. AI OVERVIEW (Google) : la reponse generee au-dessus des resultats de recherche. Elle s'appuie sur l'index Google. Les leviers restent proches du SEO : indexation, structure, donnees structurees, autorite de la page, fraicheur. L'enjeu business est une PERTE de trafic existant, mesurable dans leurs outils.",
     "2. ASSISTANTS IA (ChatGPT, Perplexity, Gemini en application, Claude) : reponses hors moteur de recherche. Ils dependent de leurs propres crawlers, de leurs donnees d'entrainement et surtout des MENTIONS de la marque ailleurs sur le web (earned media, citations par des tiers, presence dans les sources de reference). L'enjeu business est une PRESENCE DE MARQUE sur une surface nouvelle, pas une perte de trafic.",
     "",
@@ -151,7 +248,7 @@ exports.handler = async function (event) {
     "Structure exacte :",
     "{",
     '"site":"nom du media",',
-    '"verdict":"une phrase de 18 mots maximum resumant la situation sur les deux surfaces",',
+    '"verdict":"une phrase de 18 mots maximum resumant la situation sur les deux environnements",',
     '"aio":{',
     '  "score":nombre 0 a 100,',
     '  "enjeu":"2 phrases : ce que ce score implique pour leur trafic de recherche et leurs abonnements",',
@@ -167,16 +264,16 @@ exports.handler = async function (event) {
     '  "acces":{"etat":"ouvert|partiel|restreint|indetermine","note":"1 phrase sur l acces des crawlers IA, en envisageant l hypothese d un blocage volontaire lie aux droits voisins"}',
     "},",
     '"signaux":[',
-    '  {"nom":"nom du critere","perimetre":"AI Overview|Assistants IA|Les deux","etat":"fort|moyen|faible","constat":"1 phrase factuelle","enjeu":"pourquoi cela compte, 1 phrase","action":"quoi faire precisement, 1 phrase"}',
+    '  {"nom":"nom du critere","perimetre":"Google AI Overview|Assistants IA|Les deux","etat":"fort|moyen|faible","constat":"1 phrase factuelle","enjeu":"pourquoi cela compte, 1 phrase","action":"quoi faire precisement, 1 phrase"}',
     "],",
     '"recos":[',
-    '  {"titre":"action en 6 mots maximum","perimetre":"AI Overview|Assistants IA|Les deux","detail":"comment la mettre en oeuvre, 2 phrases","impact":"fort|moyen","delai":"court terme|moyen terme","responsable":"Redaction|Technique|Marketing|Produit"}',
+    '  {"titre":"action en 6 mots maximum","perimetre":"Google AI Overview|Assistants IA|Les deux","detail":"comment la mettre en oeuvre, 2 phrases","impact":"fort|moyen","delai":"court terme|moyen terme","responsable":"Redaction|Technique|Marketing|Produit"}',
     "]",
     "}",
     "",
     "Contraintes :",
-    "- signaux : exactement 6 entrees. Trois qui concernent surtout AI Overview (structure et lisibilite machine, donnees et chiffres cites, fraicheur et mise a jour). Trois qui concernent surtout les assistants (autorite et signature, mentions de la marque hors de votre site, profondeur thematique).",
-    "- recos : exactement 6 entrees, de la plus prioritaire a la moins prioritaire, avec un equilibre entre les deux surfaces.",
+    "- signaux : exactement 6 entrees. Trois qui concernent surtout Google AI Overview (structure et lisibilite machine, donnees et chiffres cites, fraicheur et mise a jour). Trois qui concernent surtout les assistants (autorite et signature, mentions de la marque hors de votre site, profondeur thematique).",
+    "- recos : exactement 6 entrees, de la plus prioritaire a la moins prioritaire, avec un equilibre entre les deux environnements.",
     "- Les recommandations doivent etre applicables par une redaction ou une equipe produit de media.",
   ].join("\n");
 
@@ -206,21 +303,32 @@ exports.handler = async function (event) {
     const endpoint =
       "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: sys }] },
-        contents: [{ role: "user", parts: [{ text: userMsg }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
-        // Ancrage Google Search retire : il demande la facturation activee.
-        // Pour le reactiver plus tard (niveau payant), ajoutez ici :
-        // tools: [{ google_search: {} }],
-      }),
-    });
+    async function callGemini(useSchema) {
+      const gen = { temperature: 0.7, maxOutputTokens: 8192 };
+      if (useSchema) {
+        gen.responseMimeType = "application/json";
+        gen.responseSchema = SCHEMA;
+      }
+      return fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: sys }] },
+          contents: [{ role: "user", parts: [{ text: userMsg }] }],
+          generationConfig: gen,
+          // Ancrage Google Search retire : il demande la facturation activee.
+          // Pour le reactiver plus tard (niveau payant), ajoutez ici :
+          // tools: [{ google_search: {} }],
+        }),
+      });
+    }
+
+    // On impose le schema. Si le modele ou la version d'API le refuse, on relance sans.
+    let resp = await callGemini(true);
+    if (!resp.ok) resp = await callGemini(false);
 
     const json = await resp.json();
 
@@ -248,7 +356,14 @@ exports.handler = async function (event) {
       };
     }
 
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    const parsed = normalise(JSON.parse(text.slice(start, end + 1)));
+    if (!parsed) {
+      return {
+        statusCode: 502,
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ error: "Le diagnostic est revenu incomplet. Relancez l'analyse." }),
+      };
+    }
     parsed.robots = robots;
 
     return {
