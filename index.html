@@ -3,217 +3,259 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Readr / Diagnostic de visibilité IA</title>
+<title>Readr / Visibilit&eacute; de votre m&eacute;dia dans les r&eacute;ponses IA</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root{
-    --ink:#0A0A0A; --paper:#FFFFFF; --accent:#8A14FF; --accent-dk:#6810C4;
-    --tint:#F5EEFF; --muted:#6B6B6B; --line:#E7E7E7;
+    --ink:#0A0A0A; --paper:#FFFFFF; --accent:#8A14FF;
+    --tint:#F5EEFF; --muted:#5F5F5F; --line:#E4E4E4; --soft:#F4F4F4;
   }
-  html,body{ height:100%; }
   body{
     font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
     color:var(--ink); background:var(--paper);
-    -webkit-font-smoothing:antialiased; line-height:1.4;
+    -webkit-font-smoothing:antialiased; line-height:1.5;
   }
-  .wrap{ max-width:920px; margin:0 auto; padding:40px 28px 64px; position:relative; overflow:hidden; }
-  .slashbg{ position:absolute; top:-60px; right:-120px; font-size:520px; font-weight:800;
-    color:var(--tint); line-height:1; z-index:0; pointer-events:none; user-select:none; }
-  .inner{ position:relative; z-index:1; }
+  .wrap{ max-width:860px; margin:0 auto; padding:44px 28px 72px; }
   .hidden{ display:none !important; }
-
-  .logo{ font-size:34px; font-weight:800; letter-spacing:-.02em; }
   .s{ color:var(--accent); }
-  .eyebrow{ margin-top:26px; font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
-  .rule{ height:2px; width:56px; background:var(--accent); margin-top:12px; }
 
-  h1{ margin-top:22px; font-size:44px; font-weight:800; letter-spacing:-.025em; line-height:1.02; }
-  .sub{ margin-top:16px; font-size:16px; color:var(--muted); max-width:560px; line-height:1.5; }
+  .logo{ font-size:30px; font-weight:800; letter-spacing:-.02em; }
+  .rule{ height:2px; width:48px; background:var(--accent); margin:28px 0 20px; }
 
-  .field{ margin-top:30px; max-width:560px; }
-  .label{ display:block; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
-  .input{ width:100%; border:1.5px solid var(--ink); background:var(--paper); font-size:16px; padding:15px 16px; font-family:inherit; color:var(--ink); outline:none; }
+  h1{ font-size:42px; font-weight:800; letter-spacing:-.03em; line-height:1.06; }
+  .sub{ margin-top:18px; font-size:17px; color:var(--muted); max-width:600px; }
+  .sub strong{ color:var(--ink); font-weight:600; }
+
+  .field{ margin-top:34px; max-width:600px; }
+  .label{ display:block; font-size:14px; font-weight:600; margin-bottom:7px; }
+  .hint{ font-weight:400; color:var(--muted); }
+  .input, select.input{ width:100%; border:1.5px solid var(--ink); background:var(--paper);
+    font-size:16px; padding:14px 15px; font-family:inherit; color:var(--ink); outline:none;
+    border-radius:0; -webkit-appearance:none; appearance:none; }
+  select.input{ background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%230A0A0A' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 15px center; background-size:12px; padding-right:40px; }
   .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--tint); }
   .input::placeholder{ color:#9A9A9A; }
-  .row{ display:flex; gap:12px; flex-wrap:wrap; }
-  .row > div{ flex:1; min-width:200px; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; }
+  .row > div{ flex:1; min-width:230px; }
 
-  .btn{ margin-top:22px; display:inline-flex; align-items:center; gap:10px; background:var(--ink); color:#fff; border:none; font-family:inherit; font-size:16px; font-weight:700; padding:16px 26px; cursor:pointer; transition:background .15s; }
+  .btn{ margin-top:24px; display:inline-block; background:var(--ink); color:#fff; border:none;
+    font-family:inherit; font-size:16px; font-weight:600; padding:15px 28px; cursor:pointer; transition:background .15s; }
   .btn:hover{ background:var(--accent); }
-  .btn:disabled{ opacity:.4; cursor:not-allowed; }
-  .btn .s{ color:var(--accent); font-weight:800; }
-  .btn:hover .s{ color:#fff; }
+  .btn:disabled{ opacity:.35; cursor:not-allowed; }
 
-  .consent{ margin-top:16px; font-size:12px; color:var(--muted); max-width:520px; line-height:1.5; }
-  .consent a{ color:var(--accent); }
+  .legal{ margin-top:18px; font-size:12.5px; color:var(--muted); max-width:540px; }
+  .legal a{ color:var(--accent); }
 
-  .load{ padding:70px 0 40px; }
-  .load .big{ font-size:120px; font-weight:800; color:var(--accent); line-height:1; animation:pulse 1.1s ease-in-out infinite; }
-  .load .msg{ margin-top:20px; font-size:16px; color:var(--muted); font-weight:600; }
-  @keyframes pulse{ 0%,100%{opacity:.25;} 50%{opacity:1;} }
+  .load{ padding:80px 0; }
+  .load .msg{ font-size:18px; font-weight:600; }
+  .load .bar{ margin-top:18px; height:3px; width:100%; max-width:340px; background:var(--soft); overflow:hidden; }
+  .load .bar i{ display:block; height:100%; width:35%; background:var(--accent); animation:slide 1.3s ease-in-out infinite; }
+  @keyframes slide{ 0%{transform:translateX(-100%);} 100%{transform:translateX(340%);} }
 
-  .reveal{ animation:fadein .5s ease both; }
-  @keyframes fadein{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;} }
+  .site-name{ font-size:15px; color:var(--muted); }
+  .verdict{ margin-top:10px; font-size:30px; font-weight:800; letter-spacing:-.02em; line-height:1.15; max-width:640px; }
 
-  .score-wrap{ display:flex; align-items:baseline; gap:14px; margin-top:20px; }
-  .score{ font-size:96px; font-weight:800; letter-spacing:-.03em; line-height:.9; }
-  .score .den{ color:var(--muted); font-size:40px; font-weight:700; }
-  .score-label{ font-size:15px; color:var(--muted); max-width:280px; line-height:1.45; }
+  .scorebox{ margin-top:26px; display:flex; align-items:center; gap:26px; flex-wrap:wrap;
+    border:1.5px solid var(--ink); padding:24px 26px; }
+  .scoreval{ font-size:64px; font-weight:800; letter-spacing:-.03em; line-height:1; }
+  .scoreval span{ font-size:24px; color:var(--muted); }
+  .scoretext{ flex:1; min-width:240px; font-size:15px; color:var(--muted); }
 
-  .signals{ margin-top:34px; border-top:1px solid var(--line); }
-  .sig{ display:flex; align-items:flex-start; gap:14px; padding:16px 0; border-bottom:1px solid var(--line); }
-  .dot{ width:10px; height:10px; border-radius:50%; margin-top:6px; flex:none; }
-  .dot.fort{ background:var(--accent); }
-  .dot.moyen{ background:#C9A6FF; }
-  .dot.faible{ background:#D8D8D8; border:1px solid #BBB; }
-  .sig-name{ font-size:15px; font-weight:700; min-width:150px; }
-  .sig-note{ font-size:14px; color:var(--muted); line-height:1.45; }
+  h2{ margin-top:48px; font-size:22px; font-weight:800; letter-spacing:-.02em; }
+  .h2note{ margin-top:7px; font-size:14.5px; color:var(--muted); max-width:600px; }
 
-  .panel{ margin-top:34px; background:var(--ink); color:#fff; padding:28px; }
-  .panel .cap{ font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
-  .panel .q{ margin-top:12px; font-size:14px; color:#B8B8B8; font-style:italic; }
-  .panel .ans{ margin-top:14px; font-size:16px; line-height:1.55; color:#EDEDED; }
-  .badge{ margin-top:20px; display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:700; padding:8px 14px; border:1px solid #333; }
-  .badge .b-dot{ width:9px; height:9px; border-radius:50%; }
-  .badge.probable .b-dot{ background:#57E38A; } .badge.probable{ color:#57E38A; border-color:#1F5233; }
-  .badge.partielle .b-dot{ background:#FFC24B; } .badge.partielle{ color:#FFC24B; border-color:#5A4415; }
-  .badge.improbable .b-dot{ background:#FF6B6B; } .badge.improbable{ color:#FF6B6B; border-color:#5A1E1E; }
-  .panel .why{ margin-top:12px; font-size:13px; color:#9A9A9A; line-height:1.45; }
+  .sig{ border-top:1px solid var(--line); padding:22px 0; }
+  .sig:last-child{ border-bottom:1px solid var(--line); }
+  .sig-head{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .sig-name{ font-size:17px; font-weight:700; }
+  .tag{ font-size:12px; font-weight:600; padding:3px 9px; border:1px solid var(--line); color:var(--muted); }
+  .tag.fort{ color:#1B7F3B; border-color:#1B7F3B; }
+  .tag.moyen{ color:#9A6200; border-color:#9A6200; }
+  .tag.faible{ color:#B0202A; border-color:#B0202A; }
+  .sig-line{ margin-top:11px; font-size:15px; display:flex; gap:10px; }
+  .sig-line b{ flex:none; width:112px; font-weight:600; color:var(--muted); font-size:13.5px; padding-top:1px; }
+  .sig-line span{ flex:1; }
 
-  .recos{ margin-top:34px; }
-  .recos-h{ font-size:13px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
-  .reco{ display:flex; gap:14px; padding:16px 0; border-bottom:1px solid var(--line); font-size:15px; line-height:1.5; }
-  .reco .n{ color:var(--accent); font-weight:800; flex:none; }
-  .blur{ filter:blur(6px); opacity:.55; pointer-events:none; user-select:none; }
+  .preview{ margin-top:20px; border:1.5px solid var(--line); }
+  .preview .top{ background:var(--soft); padding:13px 20px; font-size:14px; color:var(--muted); border-bottom:1px solid var(--line); }
+  .preview .body{ padding:22px 24px; }
+  .preview .q{ font-size:16px; font-weight:600; }
+  .preview .ans{ margin-top:14px; font-size:15.5px; color:#333; }
+  .preview .foot{ margin-top:18px; padding-top:16px; border-top:1px solid var(--line); font-size:14.5px; }
+  .preview .foot b{ font-weight:700; }
+  .preview .foot .why{ color:var(--muted); }
 
-  .gate{ margin-top:26px; background:var(--tint); border:1.5px solid var(--accent); padding:28px; }
-  .gate h3{ font-size:22px; font-weight:800; letter-spacing:-.02em; }
-  .gate p{ margin-top:8px; font-size:14px; color:#4A4A4A; line-height:1.5; max-width:480px; }
-  .gate .input{ border-color:var(--ink); background:#fff; margin-top:16px; }
-  .check{ display:flex; gap:10px; align-items:flex-start; margin-top:14px; font-size:12px; color:var(--muted); line-height:1.5; }
-  .check input{ margin-top:2px; accent-color:var(--accent); }
+  .reco{ border-top:1px solid var(--line); padding:20px 0; }
+  .reco:last-child{ border-bottom:1px solid var(--line); }
+  .reco-head{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .reco-num{ font-size:15px; font-weight:800; color:var(--accent); }
+  .reco-title{ font-size:17px; font-weight:700; flex:1; min-width:200px; }
+  .reco-detail{ margin-top:9px; font-size:15px; color:#3A3A3A; }
+  .reco-meta{ margin-top:11px; font-size:13px; color:var(--muted); }
 
-  .unlocked-note{ margin-top:20px; background:var(--ink); color:#fff; padding:18px 22px; font-size:14px; }
-  .unlocked-note .s{ font-weight:800; }
+  .locked{ position:relative; }
+  .locked .veil{ filter:blur(5px); opacity:.5; pointer-events:none; user-select:none; }
 
-  .err{ margin-top:24px; border-left:3px solid var(--accent); background:var(--tint); padding:18px 20px; font-size:14px; line-height:1.5; }
-  .link{ background:none; border:none; color:var(--accent); font-weight:700; cursor:pointer; font-family:inherit; font-size:14px; padding:0; text-decoration:underline; margin-top:24px; }
+  .gate{ margin-top:28px; border:1.5px solid var(--ink); padding:30px; }
+  .gate h3{ font-size:21px; font-weight:800; letter-spacing:-.02em; }
+  .gate p{ margin-top:9px; font-size:15px; color:var(--muted); max-width:520px; }
+  .gate ul{ margin:16px 0 0 18px; font-size:15px; color:#3A3A3A; }
+  .gate li{ margin-top:5px; }
+  .gate .input{ margin-top:20px; }
+  .check{ display:flex; gap:10px; align-items:flex-start; margin-top:14px; font-size:12.5px; color:var(--muted); }
+  .check input{ margin-top:3px; accent-color:var(--accent); }
 
-  .foot{ margin-top:48px; padding-top:20px; border-top:1px solid var(--line); display:flex; justify-content:space-between; font-size:12px; color:#9A9A9A; flex-wrap:wrap; gap:8px; }
-  .foot .s{ font-weight:800; }
+  .done{ margin-top:26px; background:var(--ink); color:#fff; padding:22px 26px; font-size:15px; }
+
+  .err{ margin-top:22px; border-left:3px solid var(--accent); background:var(--tint); padding:16px 20px; font-size:14.5px; }
+  .again{ background:none; border:none; color:var(--accent); font-weight:600; cursor:pointer;
+    font-family:inherit; font-size:15px; padding:0; text-decoration:underline; margin-top:34px; }
+
+  .foot-bar{ margin-top:56px; padding-top:22px; border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; font-size:13px; color:#8C8C8C; flex-wrap:wrap; gap:8px; }
 
   @media (max-width:620px){
-    h1{ font-size:32px; } .score{ font-size:68px; } .score .den{ font-size:30px; }
-    .slashbg{ font-size:340px; right:-70px; }
+    h1{ font-size:31px; } .verdict{ font-size:24px; } .scoreval{ font-size:52px; }
+    .sig-line{ display:block; } .sig-line b{ width:auto; display:block; margin-bottom:3px; }
   }
-  @media (prefers-reduced-motion: reduce){ .load .big{ animation:none; opacity:1; } .reveal{ animation:none; } }
+  @media (prefers-reduced-motion: reduce){ .load .bar i{ animation:none; width:100%; } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="slashbg" aria-hidden="true">/</div>
-  <div class="inner">
-    <div class="logo">read<span class="s">/</span>r</div>
+  <div class="logo">read<span class="s">/</span>r</div>
 
-    <!-- ETAPE 1 : SAISIE -->
-    <section id="step-input">
-      <div class="eyebrow">Diagnostic <span class="s">/</span> Visibilité IA</div>
-      <div class="rule"></div>
-      <h1>Vos contenus sont-ils cités<br />par les <span class="s">/</span> réponses IA ?</h1>
-      <p class="sub">Google AI Overview, ChatGPT, Perplexity. Quand une IA répond à la place de votre lecteur,
-        êtes-vous la source citée, ou l'oubliée ? Scan gratuit en 30 secondes.</p>
+  <!-- SAISIE -->
+  <section id="step-input">
+    <div class="rule"></div>
+    <h1>Quand une IA r&eacute;pond &agrave; la place<br />de votre article, qui est cit&eacute; ?</h1>
+    <p class="sub">Depuis le d&eacute;ploiement des AI Overviews en France, une part croissante des recherches
+      se termine sans clic. Les r&eacute;ponses sont r&eacute;dig&eacute;es &agrave; partir de sources s&eacute;lectionn&eacute;es par Google.
+      <strong>Testez si votre m&eacute;dia fait partie de ces sources.</strong></p>
 
-      <div class="field">
-        <div class="row">
-          <div>
-            <label class="label" for="url">URL de votre site</label>
-            <input id="url" class="input" type="text" placeholder="lemonde.fr" autocomplete="off" />
-          </div>
-          <div>
-            <label class="label" for="topic">Sujet principal (optionnel)</label>
-            <input id="topic" class="input" type="text" placeholder="actualité économique" autocomplete="off" />
-          </div>
+    <div class="field">
+      <div class="row">
+        <div>
+          <label class="label" for="url">Adresse de votre site</label>
+          <input id="url" class="input" type="text" placeholder="votremedia.fr" autocomplete="off" />
+        </div>
+        <div>
+          <label class="label" for="theme">Th&eacute;matique dominante</label>
+          <select id="theme" class="input">
+            <option value="">Choisir une th&eacute;matique</option>
+            <option>Actualit&eacute; g&eacute;n&eacute;rale</option>
+            <option>&Eacute;conomie et finance</option>
+            <option>Politique et institutions</option>
+            <option>Presse quotidienne r&eacute;gionale</option>
+            <option>Sport</option>
+            <option>Culture et divertissement</option>
+            <option>Musique et streaming</option>
+            <option>Technologie et num&eacute;rique</option>
+            <option>Sant&eacute; et bien-&ecirc;tre</option>
+            <option>Sciences et environnement</option>
+            <option>Lifestyle, mode et voyage</option>
+            <option>Presse professionnelle et B2B</option>
+            <option>Comparateur et guide d'achat</option>
+            <option>&Eacute;ducation et formation</option>
+            <option>Immobilier et emploi</option>
+          </select>
         </div>
       </div>
+    </div>
 
-      <button id="analyze-btn" class="btn" disabled>Analyser ma visibilité <span class="s">/</span></button>
-      <div id="input-error" class="err hidden"></div>
+    <button id="analyze-btn" class="btn" disabled>Lancer le diagnostic</button>
+    <div id="input-error" class="err hidden"></div>
 
-      <p class="consent">En lançant l'analyse, vous acceptez que Readr traite l'URL saisie aux fins du diagnostic.
-        Aucune donnée personnelle n'est requise à cette étape. <a href="#" target="_blank" rel="noopener">Politique de confidentialité</a>.</p>
-    </section>
+    <p class="legal">Analyse gratuite, sans engagement. Seule l'adresse du site est trait&eacute;e &agrave; cette &eacute;tape,
+      aucune donn&eacute;e personnelle n'est demand&eacute;e. <a href="#" target="_blank" rel="noopener">Politique de confidentialit&eacute;</a>.</p>
+  </section>
 
-    <!-- ETAPE 2 : CHARGEMENT -->
-    <section id="step-loading" class="hidden">
-      <div class="load">
-        <div class="eyebrow">Analyse en cours <span class="s">/</span></div>
-        <div class="big">/</div>
-        <div class="msg" id="load-msg">Lecture de vos contenus...</div>
-      </div>
-    </section>
+  <!-- CHARGEMENT -->
+  <section id="step-loading" class="hidden">
+    <div class="load">
+      <div class="msg" id="load-msg">Analyse de vos contenus</div>
+      <div class="bar"><i></i></div>
+    </div>
+  </section>
 
-    <!-- ETAPE 3 : RESULTATS -->
-    <section id="step-results" class="hidden reveal">
-      <div class="eyebrow" style="margin-top:24px">Résultat <span class="s">/</span> <span id="r-site"></span></div>
-      <div class="rule"></div>
+  <!-- RESULTATS -->
+  <section id="step-results" class="hidden">
+    <div class="rule"></div>
+    <div class="site-name" id="r-site"></div>
+    <div class="verdict" id="r-verdict"></div>
 
-      <div class="score-wrap">
-        <div class="score"><span id="r-score"></span><span class="s">/</span><span class="den">100</span></div>
-        <div class="score-label">Score de préparation à la citation par les moteurs de réponse IA.</div>
-      </div>
+    <div class="scorebox">
+      <div class="scoreval"><span id="r-score"></span><span> / 100</span></div>
+      <div class="scoretext" id="r-enjeu"></div>
+    </div>
 
-      <div class="signals" id="r-signals"></div>
-
-      <div class="panel">
-        <div class="cap">Aperçu <span class="s">/</span> réponse IA générée</div>
+    <h2>Ce qu'une IA voit de votre site</h2>
+    <p class="h2note">Voici une question que vos lecteurs posent r&eacute;ellement, et la r&eacute;ponse que produirait
+      un moteur g&eacute;n&eacute;ratif aujourd'hui.</p>
+    <div class="preview">
+      <div class="top">R&eacute;ponse g&eacute;n&eacute;r&eacute;e pour la recherche suivante</div>
+      <div class="body">
         <div class="q" id="r-query"></div>
         <div class="ans" id="r-answer"></div>
-        <div class="badge" id="r-badge"><span class="b-dot"></span><span id="r-verdict"></span></div>
-        <div class="why" id="r-why"></div>
+        <div class="foot">
+          <b id="r-cit-verdict"></b>
+          <div class="why" id="r-cit-why"></div>
+        </div>
       </div>
-
-      <div class="recos">
-        <div class="recos-h">Plan d'action <span class="s">/</span> <span id="r-recos-count"></span> recommandations</div>
-        <div id="r-recos-open"></div>
-        <div id="r-recos-locked-wrap"><div class="blur" id="r-recos-locked" aria-hidden="true"></div></div>
-      </div>
-
-      <!-- Paywall : capture du lead pour débloquer -->
-      <div class="gate" id="gate">
-        <h3>Débloquez le plan d'action complet.</h3>
-        <p>Toutes les recommandations, immédiatement, sur cette page. Laissez votre email pour y accéder.
-          Un expert Readr pourra vous recontacter pour en discuter.</p>
-        <input id="email" class="input" type="email" placeholder="vous@votremedia.fr" autocomplete="off" />
-        <label class="check">
-          <input id="consent" type="checkbox" />
-          <span>J'accepte d'être recontacté par Readr et que mon email soit conservé à cette fin. Vos données ne sont pas cédées à des tiers.</span>
-        </label>
-        <button id="unlock-btn" class="btn" disabled>Débloquer le diagnostic <span class="s">/</span></button>
-        <div id="gate-error" class="err hidden"></div>
-      </div>
-
-      <div id="unlocked-note" class="unlocked-note hidden">
-        <span class="s">/</span> Plan d'action débloqué. Merci, un expert Readr peut vous recontacter.
-      </div>
-
-      <button id="restart-btn" class="link">Analyser un autre site</button>
-    </section>
-
-    <div class="foot">
-      <span>read<span class="s">/</span>r <span class="s">/</span> Diagnostic de visibilité IA</span>
-      <span>Beta <span class="s">/</span> readr.agency</span>
     </div>
+
+    <h2>Les cinq crit&egrave;res qui d&eacute;cident de votre citation</h2>
+    <p class="h2note">Pour chacun : ce que nous observons, pourquoi cela compte, et l'action &agrave; mener.</p>
+    <div id="r-signals"></div>
+
+    <h2>Votre plan d'action</h2>
+    <p class="h2note" id="r-recos-note"></p>
+    <div id="r-recos-open"></div>
+    <div class="locked" id="r-locked"><div class="veil" id="r-recos-locked"></div></div>
+
+    <!-- Capture -->
+    <div class="gate" id="gate">
+      <h3>Acc&eacute;der au plan d'action complet</h3>
+      <p>Les recommandations restantes s'affichent imm&eacute;diatement sur cette page.</p>
+      <ul>
+        <li>Les actions class&eacute;es par priorit&eacute; et par &eacute;quipe concern&eacute;e</li>
+        <li>Le niveau d'impact et le d&eacute;lai de mise en oeuvre</li>
+        <li>La marche &agrave; suivre d&eacute;taill&eacute;e pour chaque action</li>
+      </ul>
+      <input id="email" class="input" type="email" placeholder="prenom.nom@votremedia.fr" autocomplete="off" />
+      <label class="check">
+        <input id="consent" type="checkbox" />
+        <span>J'accepte que Readr conserve mon adresse professionnelle pour me recontacter au sujet de ce
+          diagnostic. Aucune cession &agrave; des tiers.</span>
+      </label>
+      <button id="unlock-btn" class="btn" disabled>Afficher le plan complet</button>
+      <div id="gate-error" class="err hidden"></div>
+    </div>
+
+    <div id="done" class="done hidden">Plan d'action affich&eacute;. Nous revenons vers vous prochainement.</div>
+
+    <button id="restart-btn" class="again">Analyser un autre site</button>
+  </section>
+
+  <div class="foot-bar">
+    <span>read<span class="s">/</span>r</span>
+    <span>Conseil en acquisition, CRM et abonnement</span>
   </div>
 </div>
 
 <script>
   var LOADING_MSGS = [
-    "Lecture de vos contenus",
-    "Simulation d'une requête lecteur",
-    "Génération de la réponse IA",
-    "Évaluation de vos signaux de citation"
+    "Analyse de vos contenus",
+    "Reconstitution d'une recherche lecteur",
+    "Simulation de la r\u00e9ponse g\u00e9n\u00e9rative",
+    "\u00c9valuation de vos crit\u00e8res de citation"
   ];
-  var VERDICT = { probable:"Citation probable", partielle:"Citation partielle", improbable:"Citation improbable" };
+  var CIT = {
+    probable: "Votre site serait probablement cit\u00e9 comme source.",
+    partielle: "Votre site serait cit\u00e9 partiellement, sans mise en avant.",
+    improbable: "Votre site ne serait pas cit\u00e9 dans cette r\u00e9ponse."
+  };
 
   var el = function(id){ return document.getElementById(id); };
   var show = function(id){ el(id).classList.remove("hidden"); };
@@ -222,10 +264,8 @@
 
   var data = null, loadTimer = null;
 
-  // Activation des boutons
   el("url").addEventListener("input", function(){ el("analyze-btn").disabled = el("url").value.trim()===""; });
   el("url").addEventListener("keydown", function(e){ if(e.key==="Enter" && el("url").value.trim()) analyze(); });
-  el("topic").addEventListener("keydown", function(e){ if(e.key==="Enter" && el("url").value.trim()) analyze(); });
   el("analyze-btn").addEventListener("click", analyze);
 
   function refreshUnlock(){
@@ -240,8 +280,8 @@
 
   function startLoading(){
     var i = 0;
-    el("load-msg").textContent = LOADING_MSGS[0] + "...";
-    loadTimer = setInterval(function(){ i=(i+1)%LOADING_MSGS.length; el("load-msg").textContent = LOADING_MSGS[i] + "..."; }, 1400);
+    el("load-msg").textContent = LOADING_MSGS[0];
+    loadTimer = setInterval(function(){ i=(i+1)%LOADING_MSGS.length; el("load-msg").textContent = LOADING_MSGS[i]; }, 1500);
   }
   function stopLoading(){ if(loadTimer){ clearInterval(loadTimer); loadTimer=null; } }
 
@@ -252,12 +292,13 @@
     var clean = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
 
     hide("step-input"); show("step-loading"); startLoading();
+    window.scrollTo({ top:0, behavior:"smooth" });
 
     try{
       var res = await fetch("/.netlify/functions/analyze", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ url: clean, topic: el("topic").value.trim() })
+        body: JSON.stringify({ url: clean, theme: el("theme").value })
       });
       var payload = null;
       try { payload = await res.json(); } catch(err) { payload = null; }
@@ -267,61 +308,75 @@
       }
       data = payload;
       stopLoading();
-      renderResults();
+      render();
       hide("step-loading"); show("step-results");
     }catch(e){
       stopLoading();
       hide("step-loading"); show("step-input");
-      el("input-error").textContent = "L'analyse n'a pas abouti : " + (e.message || "erreur inconnue");
+      el("input-error").textContent = "Le diagnostic n'a pas abouti : " + (e.message || "erreur inconnue");
       show("input-error");
     }
   }
 
-  function renderResults(){
+  function render(){
     el("r-site").textContent = data.site || "";
+    el("r-verdict").textContent = data.verdict || "";
     el("r-score").textContent = data.score;
+    el("r-enjeu").textContent = data.enjeu || "";
 
-    var sig = "";
-    (data.signaux||[]).forEach(function(s){
-      var etat = (s.etat==="fort"||s.etat==="moyen"||s.etat==="faible") ? s.etat : "faible";
-      sig += '<div class="sig"><span class="dot '+etat+'"></span>'
-           + '<span class="sig-name">'+esc(s.nom)+'</span>'
-           + '<span class="sig-note">'+esc(s.note)+'</span></div>';
-    });
-    el("r-signals").innerHTML = sig;
-
-    el("r-query").textContent = 'Requête testée : "' + (data.requete||"") + '"';
+    el("r-query").textContent = data.requete || "";
     el("r-answer").textContent = data.apercuIA || "";
 
     var v = (data.citation && data.citation.verdict) || "improbable";
-    if(v!=="probable" && v!=="partielle" && v!=="improbable") v="improbable";
-    el("r-badge").className = "badge " + v;
-    el("r-verdict").textContent = VERDICT[v];
-    el("r-why").textContent = (data.citation && data.citation.raison) || "";
+    if(!CIT[v]) v = "improbable";
+    el("r-cit-verdict").textContent = CIT[v];
+    el("r-cit-why").textContent = (data.citation && data.citation.raison) || "";
+
+    var sig = "";
+    (data.signaux||[]).forEach(function(s){
+      var etat = (s.etat==="fort"||s.etat==="moyen"||s.etat==="faible") ? s.etat : "moyen";
+      var mot = etat==="fort" ? "Solide" : (etat==="moyen" ? "\u00c0 renforcer" : "Point faible");
+      sig += '<div class="sig"><div class="sig-head">'
+           + '<span class="sig-name">'+esc(s.nom)+'</span>'
+           + '<span class="tag '+etat+'">'+mot+'</span></div>'
+           + '<div class="sig-line"><b>Constat</b><span>'+esc(s.constat)+'</span></div>'
+           + '<div class="sig-line"><b>Pourquoi</b><span>'+esc(s.enjeu)+'</span></div>'
+           + '<div class="sig-line"><b>A faire</b><span>'+esc(s.action)+'</span></div>'
+           + '</div>';
+    });
+    el("r-signals").innerHTML = sig;
 
     var recos = data.recos || [];
-    el("r-recos-count").textContent = recos.length;
+    el("r-recos-note").textContent = recos.length + " actions class\u00e9es par priorit\u00e9, avec l'\u00e9quipe concern\u00e9e.";
 
-    var open = "";
-    if(recos[0]) open = '<div class="reco"><span class="n">/ 01</span><span>'+esc(recos[0])+'</span></div>';
-    el("r-recos-open").innerHTML = open;
-
+    el("r-recos-open").innerHTML = recos[0] ? recoHTML(recos[0], 1) : "";
     var locked = "";
-    recos.slice(1).forEach(function(r, i){
-      var n = i + 2; var num = n < 10 ? "0"+n : ""+n;
-      locked += '<div class="reco"><span class="n">/ '+num+'</span><span>'+esc(r)+'</span></div>';
-    });
+    recos.slice(1).forEach(function(r, i){ locked += recoHTML(r, i+2); });
     el("r-recos-locked").innerHTML = locked;
 
-    // reset paywall
-    show("gate"); hide("unlocked-note");
-    el("email").value = ""; el("consent").checked = false; el("unlock-btn").disabled = true; hide("gate-error");
+    show("gate"); hide("done");
+    el("email").value = ""; el("consent").checked = false;
+    el("unlock-btn").disabled = true; hide("gate-error");
+  }
+
+  function recoHTML(r, n){
+    var num = n < 10 ? "0"+n : ""+n;
+    var meta = [];
+    if(r.impact) meta.push("Impact " + r.impact);
+    if(r.delai) meta.push(r.delai);
+    if(r.responsable) meta.push("Pilotage : " + r.responsable);
+    return '<div class="reco"><div class="reco-head">'
+      + '<span class="reco-num">'+num+'</span>'
+      + '<span class="reco-title">'+esc(r.titre)+'</span></div>'
+      + '<div class="reco-detail">'+esc(r.detail)+'</div>'
+      + (meta.length ? '<div class="reco-meta">'+esc(meta.join("  \u00b7  "))+'</div>' : '')
+      + '</div>';
   }
 
   async function unlock(){
     hide("gate-error");
     el("unlock-btn").disabled = true;
-    el("unlock-btn").innerHTML = 'Déblocage... <span class="s">/</span>';
+    el("unlock-btn").textContent = "Affichage en cours";
     try{
       await fetch("/.netlify/functions/lead", {
         method:"POST",
@@ -334,18 +389,16 @@
           consent: el("consent").checked
         })
       });
-    }catch(e){ /* on debloque quand meme cote client : le lead a pu partir */ }
+    }catch(e){ /* le lead a pu partir, on affiche quand meme */ }
 
-    // Paywall leve : on enleve le flou et on affiche toutes les recos
-    var wrap = el("r-recos-locked-wrap");
-    wrap.querySelector(".blur").classList.remove("blur");
-    hide("gate"); show("unlocked-note");
-    el("unlock-btn").innerHTML = 'Débloquer le diagnostic <span class="s">/</span>';
+    el("r-recos-locked").classList.remove("veil");
+    hide("gate"); show("done");
+    el("unlock-btn").textContent = "Afficher le plan complet";
   }
 
   function restart(){
     data = null;
-    el("url").value = ""; el("topic").value = "";
+    el("url").value = ""; el("theme").value = "";
     el("analyze-btn").disabled = true;
     hide("step-results"); hide("step-loading"); show("step-input");
     window.scrollTo({ top:0, behavior:"smooth" });
