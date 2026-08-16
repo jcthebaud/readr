@@ -1,8 +1,8 @@
 // Fonction Netlify : appelle l'API Gemini cote serveur (la cle reste cachee ici).
 // Recoit { url, topic }, renvoie le diagnostic en JSON propre.
-// Modele par defaut : gemini-3.6-flash (niveau gratuit disponible sur Google AI Studio).
+// Modele par defaut : gemini-3.5-flash-lite (couvert par le niveau gratuit Google AI Studio).
 
-const MODEL = "gemini-3.6-flash";
+const MODEL = "gemini-3.5-flash-lite";
 
 exports.handler = async function (event) {
   if (event.httpMethod !== "POST") {
@@ -55,9 +55,9 @@ exports.handler = async function (event) {
       body: JSON.stringify({
         system_instruction: { parts: [{ text: sys }] },
         contents: [{ role: "user", parts: [{ text: userMsg }] }],
-        // Ancrage sur Google Search. Si Gemini renvoie une erreur liee a cet outil,
-        // supprimez la ligne "tools" ci-dessous.
-        tools: [{ google_search: {} }],
+        // Ancrage Google Search retire : il demande la facturation activee.
+        // Pour le reactiver plus tard (niveau payant), ajoutez ici :
+        // tools: [{ google_search: {} }],
       }),
     });
 
