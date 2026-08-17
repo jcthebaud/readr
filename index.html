@@ -116,6 +116,7 @@
   .preview .foot{ margin-top:18px; padding-top:16px; border-top:1px solid var(--line); font-size:14.5px; }
   .preview .foot b{ font-weight:700; }
   .preview .foot .why{ color:var(--muted); }
+  .preview .nuance{ margin-top:8px; padding-top:8px; border-top:1px solid var(--line); font-size:13px; }
 
   .reco{ border-top:1px solid var(--line); padding:20px 0; }
   .reco:last-child{ border-bottom:1px solid var(--line); }
@@ -131,6 +132,10 @@
   .mode{ margin-top:14px; font-size:13px; display:inline-flex; align-items:center; gap:8px;
     padding:6px 12px; border:1px solid var(--line); color:var(--muted); }
   .mode.ancre{ border-color:var(--accent); color:var(--accent); font-weight:600; }
+
+  .alerte{ margin-top:20px; border:1.5px solid var(--accent); background:var(--tint); padding:18px 22px; }
+  .alerte-titre{ font-size:16px; font-weight:800; letter-spacing:-.01em; }
+  .alerte-txt{ margin-top:7px; font-size:14px; line-height:1.55; }
 
   .duo{ display:flex; gap:16px; margin-top:26px; flex-wrap:wrap; }
   .card{ flex:1; min-width:250px; border:1.5px solid var(--ink); padding:20px 22px; }
@@ -288,6 +293,11 @@
     <div class="verdict" id="r-verdict"></div>
     <div class="mode" id="r-mode"></div>
 
+    <div class="alerte hidden" id="r-alerte">
+      <div class="alerte-titre" id="r-alerte-titre"></div>
+      <div class="alerte-txt" id="r-alerte-txt"></div>
+    </div>
+
     <div class="duo">
       <div class="card">
         <div class="card-kicker">Dans les r&eacute;sultats Google</div>
@@ -303,6 +313,13 @@
         <div class="card-cap">des crit&egrave;res mesur&eacute;s sont couverts, hors mentions externes</div>
         <div class="card-note" id="r-llm-enjeu"></div>
       </div>
+    </div>
+
+    <div id="nonmes" class="nonmes hidden">
+      <b>Aucun score n'a pu &ecirc;tre calcul&eacute;.</b>
+      <div id="nonmes-raison"></div>
+      <div class="nonmes-plus">Nous pr&eacute;f&eacute;rons ne rien afficher plut&ocirc;t qu'une estimation. Le reste du
+        rapport s'appuie uniquement sur ce qui a pu &ecirc;tre v&eacute;rifi&eacute;.</div>
     </div>
 
     <!-- Capture : le rapport d&eacute;taill&eacute; est verrouill&eacute; en dessous -->
@@ -327,13 +344,6 @@
     </div>
 
     <!-- Rapport verrouill&eacute; -->
-    <div id="nonmes" class="nonmes hidden">
-      <b>Aucun score n'a pu &ecirc;tre calcul&eacute;.</b>
-      <div id="nonmes-raison"></div>
-      <div class="nonmes-plus">Nous pr&eacute;f&eacute;rons ne rien afficher plut&ocirc;t qu'une estimation. Le reste du
-        rapport s'appuie uniquement sur ce qui a pu &ecirc;tre v&eacute;rifi&eacute;.</div>
-    </div>
-
     <div id="rapport" class="veil">
       <h2>Google AI Overview : ce qui s'affiche &agrave; la place de votre article</h2>
       <p class="h2note">Le r&eacute;sum&eacute; que Google affiche au-dessus de ses r&eacute;sultats. Il s'appuie sur l'index
@@ -346,8 +356,24 @@
           <div class="foot">
             <b id="r-cit-verdict"></b>
             <div class="why" id="r-cit-why"></div>
+            <div class="why nuance">Votre marque peut &ecirc;tre nomm&eacute;e dans une r&eacute;ponse sans que vos pages
+              en soient la source. C'est la seconde situation qui est mesur&eacute;e ici, et la requ&ecirc;te test&eacute;e
+              ne contient volontairement aucun nom de marque.</div>
           </div>
         </div>
+      </div>
+
+      <div class="sousbloc" id="r-autres-bloc">
+        <div class="sousbloc-t">Les autres questions sur lesquelles vous vous jouez</div>
+        <div id="r-autres"></div>
+      </div>
+
+      <div class="sousbloc">
+        <div class="sousbloc-t">Le passage que Google pourrait extraire de vos pages
+          <span class="measured">Donn&eacute;e v&eacute;rifi&eacute;e</span></div>
+        <p class="sousbloc-n">Un AI Overview ne reprend pas une page enti&egrave;re, il en extrait un passage
+          autonome. Voici celui que vos pages offrent aujourd'hui.</p>
+        <div id="r-passage"></div>
       </div>
 
       <h2>Assistants IA : &ecirc;tes-vous cit&eacute; dans leurs r&eacute;ponses ?</h2>
@@ -366,7 +392,7 @@
       <p class="h2note">Ces &eacute;l&eacute;ments ont &eacute;t&eacute; lus directement sur vos pages, ils ne sont pas estim&eacute;s.</p>
       <div class="robots" id="r-site-block">
         <div class="robots-head">
-          <span class="robots-title">Lecture de vos articles</span>
+          <span class="robots-title">Lecture de vos pages</span>
           <span class="measured">Donn&eacute;es v&eacute;rifi&eacute;es</span>
         </div>
         <p class="robots-intro" id="r-site-intro"></p>
@@ -433,23 +459,26 @@
     "\u00c9valuation de vos crit\u00e8res de citation"
   ];
   var ETAT_MESURE = { present:"Pr\u00e9sent", partiel:"Partiel", absent:"Absent" };
-  var SITE_OK = "Analyse de {n} article(s) de votre site.";
-  var SITE_KO = "Vos articles n'ont pas pu \u00eatre lus.";
+  var SITE_OK = "Analyse de {n} page(s) de votre site.";
+  var SITE_KO = "Vos pages n'ont pas pu \u00eatre lues.";
   var LB_SCHEMA = "Balisage Article (donn\u00e9es structur\u00e9es)";
   var LB_AUTEUR_S = "Auteur dans les donn\u00e9es structur\u00e9es";
   var LB_AUTEUR_V = "Signature visible sur la page";
   var LB_DATE_PUB = "Date de publication";
   var LB_DATE_MAJ = "Date de mise \u00e0 jour";
-  var LB_LONGUEUR = "Longueur moyenne des articles";
-  var LB_CHIFFRES = "Donn\u00e9es chiffr\u00e9es par article";
+  var LB_LONGUEUR = "Longueur moyenne des pages";
+  var LB_CHIFFRES = "Donn\u00e9es chiffr\u00e9es par page";
   var MOTS = "mots";
   var ETAT_BOT = { bloque:"Bloqu\u00e9", partiel:"Partiel", autorise:"Autoris\u00e9" };
   var ROBOTS_OK_0 = "Aucun des {n} robots IA courants n'est bloqu\u00e9 sur votre site.";
   var ROBOTS_OK_N = "{b} robots IA sur {n} sont bloqu\u00e9s sur votre site.";
   var ROBOTS_KO = "Votre fichier robots.txt n'a pas pu \u00eatre lu.";
+  var PASSAGE_KO = "Aucun passage clairement extractible n'a \u00e9t\u00e9 rep\u00e9r\u00e9 sur vos pages. Les paragraphes sont soit trop longs, soit trop d\u00e9pendants de leur contexte pour \u00eatre repris tels quels.";
+  var ALERTE_T = "{b} robots IA sur {n} sont bloqu\u00e9s sur votre site";
+  var ALERTE_X = "Sont concern\u00e9s : {l}. Un robot bloqu\u00e9 ne peut citer aucun de vos contenus. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'\u00eatre technique.";
   var RAISONS = {
     "page d'accueil illisible": "Votre site a refus\u00e9 notre requ\u00eate de lecture, ce qui arrive avec certaines protections anti-robots.",
-    "aucun article accessible": "Nous avons atteint votre site mais n'avons pas pu identifier d'article \u00e0 analyser depuis la page d'accueil.",
+    "aucun article accessible": "Nous avons atteint votre site mais n'avons pas pu identifier de page \u00e0 analyser depuis l'accueil.",
     "robots.txt inaccessible": "Votre site a refus\u00e9 notre requ\u00eate de lecture."
   };
   var RAISON_DEFAUT = "Vos pages n'ont pas pu \u00eatre lues automatiquement.";
@@ -457,7 +486,7 @@
   var REDIR = "redirection depuis";
   var TXT_ATTENTE = "Affichage en cours";
   var TXT_BOUTON = "Afficher le rapport complet";
-  var MODE_LU = "Scores calcul\u00e9s sur {n} article(s) lus sur votre site";
+  var MODE_LU = "Scores calcul\u00e9s sur {n} page(s) lue(s) sur votre site";
   var MODE_NONLU = "Pages non lisibles, aucun score calcul\u00e9";
   var ERR_DOMAINE = "Indiquez le domaine complet avec son extension, par exemple economist.com";
   var PRESENCE = { forte:"Forte", partielle:"Partielle", faible:"Faible" };
@@ -466,9 +495,9 @@
   var MOT_AFAIRE = "\u00c0 faire";
   var NOTE_RECOS = " correctifs \u00e0 mettre en oeuvre, class\u00e9s par priorit\u00e9.";
   var CIT = {
-    probable: "Votre site serait probablement cit\u00e9 comme source.",
-    partielle: "Votre site serait cit\u00e9 partiellement, sans mise en avant.",
-    improbable: "Votre site ne serait pas cit\u00e9 dans cette r\u00e9ponse."
+    probable: "Vos pages seraient probablement retenues comme source de cette r\u00e9ponse.",
+    partielle: "Vos pages pourraient \u00eatre reprises, sans \u00eatre mises en avant comme source.",
+    improbable: "Vos pages ne seraient probablement pas retenues comme source de cette r\u00e9ponse."
   };
 
   var el = function(id){ return document.getElementById(id); };
@@ -563,7 +592,7 @@
     var lu = data.site_ && data.site_.dispo;
     if(lu){
       md.className = "mode ancre";
-      md.textContent = MODE_LU.replace("{n}", data.site_.nbArticles);
+      md.textContent = MODE_LU.replace("{n}", data.site_.nbPages);
     } else {
       md.className = "mode";
       md.textContent = MODE_NONLU;
@@ -586,6 +615,24 @@
       el("r-llm-enjeu").textContent = llm.enjeu || "";
 
       el("r-query").textContent = aio.requete || "";
+
+      // autres requetes de test
+      var autres = aio.autresRequetes || [];
+      if(autres.length){
+        var hq = "";
+        autres.forEach(function(q, i){
+          hq += '<div class="rq"><span class="n">0'+(i+2)+'</span><span>'+esc(q)+'</span></div>';
+        });
+        el("r-autres").innerHTML = hq;
+        el("r-autres-bloc").classList.remove("hidden");
+      } else {
+        el("r-autres-bloc").classList.add("hidden");
+      }
+
+      // passage extractible reellement trouve sur le site
+      el("r-passage").innerHTML = aio.passage
+        ? '<div class="passage">'+esc(aio.passage)+'</div>'
+        : '<div class="passage-ko">'+PASSAGE_KO+'</div>';
       el("r-answer").textContent = aio.apercu || "";
       var v = (aio.citation && aio.citation.verdict) || "improbable";
       if(!CIT[v]) v = "improbable";
@@ -601,6 +648,7 @@
       renderCalc("r-calc-llm", llm);
     }
 
+    renderAlerte(data.robots);
     renderSite(data.site_);
     renderRobots(data.robots);
 
@@ -648,6 +696,17 @@
     el(prefixe + "-list").innerHTML = html;
   }
 
+  function renderAlerte(rb){
+    var a = el("r-alerte");
+    if(rb && rb.dispo && rb.nbBloques > 0){
+      el("r-alerte-titre").textContent = ALERTE_T.replace("{b}", rb.nbBloques).replace("{n}", rb.nbTotal);
+      el("r-alerte-txt").textContent = ALERTE_X.replace("{l}", (rb.listeBloques||[]).join(", "));
+      a.classList.remove("hidden");
+    } else {
+      a.classList.add("hidden");
+    }
+  }
+
   function renderSite(st){
     var intro = el("r-site-intro"), liste = el("r-site-list");
     if(!st || !st.dispo){
@@ -655,7 +714,7 @@
       liste.innerHTML = "";
       return;
     }
-    intro.textContent = SITE_OK.replace("{n}", st.nbArticles);
+    intro.textContent = SITE_OK.replace("{n}", st.nbPages);
     var lignes = [
       [LB_SCHEMA, st.balisageArticle],
       [LB_AUTEUR_S, st.auteurBalise],
