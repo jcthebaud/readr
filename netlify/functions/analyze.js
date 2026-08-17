@@ -24,8 +24,9 @@ const SCHEMA = {
         requete: { type: "STRING" },
         apercu: { type: "STRING" },
         citationRaison: { type: "STRING" },
+        autresRequetes: { type: "ARRAY", items: { type: "STRING" } },
       },
-      required: ["enjeu", "requete", "apercu", "citationRaison"],
+      required: ["enjeu", "requete", "apercu", "citationRaison", "autresRequetes"],
     },
     llm: {
       type: "OBJECT",
@@ -49,7 +50,7 @@ const SCHEMA = {
         type: "OBJECT",
         properties: {
           titre: { type: "STRING" },
-          perimetre: { type: "STRING", enum: ["Google AI Overview", "Assistants IA", "Les deux"] },
+          perimetre: { type: "STRING", enum: ["Google AI Overview", "Assistants IA", "Google et assistants IA"] },
           detail: { type: "STRING" },
           impact: { type: "STRING", enum: ["fort", "moyen"] },
           delai: { type: "STRING", enum: ["court terme", "moyen terme"] },
@@ -93,6 +94,8 @@ function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, red
       enjeu: aio.enjeu || "",
       requete: aio.requete || "",
       apercu: aio.apercu || "",
+      autresRequetes: Array.isArray(aio.autresRequetes) ? aio.autresRequetes.slice(0, 3) : [],
+      passage: (site && site.passage) || "",
       citation: { verdict: verdictCitation(calcAIO.score), raison: aio.citationRaison || "" },
     } : null,
     llm: calcLLM ? {
@@ -138,24 +141,38 @@ function etatVers(v, plein, moitie) {
 // Score Google AI Overview : entierement mesurable sur les pages.
 function scoreAIO(m) {
   const d = [];
-  d.push({ critere: "Balisage Article ou NewsArticle", obtenu: etatVers(m.balisageArticle, 20, 10), max: 20,
-           constat: m.balisageArticle === "present" ? "Present sur les articles analyses"
-                  : (m.balisageArticle === "partiel" ? "Present sur une partie des articles" : "Absent des articles analyses") });
-  d.push({ critere: "Auteur declare dans les donnees structurees", obtenu: etatVers(m.auteurBalise, 15, 8), max: 15,
-           constat: m.auteurBalise === "present" ? "Champ auteur renseigne"
-                  : (m.auteurBalise === "partiel" ? "Champ auteur renseigne par intermittence" : "Champ auteur absent") });
-  d.push({ critere: "Date de publication declaree", obtenu: etatVers(m.datePubliee, 10, 5), max: 10,
-           constat: m.datePubliee === "present" ? "Date de publication presente" : "Date de publication absente" });
-  d.push({ critere: "Date de mise a jour declaree", obtenu: etatVers(m.dateMaj, 15, 8), max: 15,
-           constat: m.dateMaj === "present" ? "Date de modification presente" : "Date de modification absente" });
-  d.push({ critere: "Signature visible sur la page", obtenu: etatVers(m.auteurAffiche, 5, 3), max: 5,
-           constat: m.auteurAffiche === "present" ? "Signature affichee" : "Aucune signature reperee" });
-  d.push({ critere: "Donnees chiffrees par article", obtenu: pts(m.chiffresMoyen, [[4,15],[3,12],[2,9],[1,5]]), max: 15,
-           constat: m.chiffresMoyen + " donnee(s) chiffree(s) en moyenne" });
-  d.push({ critere: "Sous-titres par article", obtenu: pts(m.sousTitresMoyen, [[5,10],[3,7],[1,4]]), max: 10,
+
+  // --- Bloc 1 : identification du contenu (30 points) ---
+  d.push({ critere: "Balisage Article ou NewsArticle", obtenu: etatVers(m.balisageArticle, 12, 6), max: 12,
+           constat: m.balisageArticle === "present" ? "Pr\u00e9sent sur les pages analys\u00e9es"
+                  : (m.balisageArticle === "partiel" ? "Pr\u00e9sent sur une partie des pages" : "Absent des pages analys\u00e9es") });
+  d.push({ critere: "Auteur d\u00e9clar\u00e9 dans les donn\u00e9es structur\u00e9es", obtenu: etatVers(m.auteurBalise, 8, 4), max: 8,
+           constat: m.auteurBalise === "present" ? "Champ auteur renseign\u00e9" : "Champ auteur absent" });
+  d.push({ critere: "Date de publication d\u00e9clar\u00e9e", obtenu: etatVers(m.datePubliee, 4, 2), max: 4,
+           constat: m.datePubliee === "present" ? "Date de publication pr\u00e9sente" : "Date de publication absente" });
+  d.push({ critere: "Date de mise \u00e0 jour d\u00e9clar\u00e9e", obtenu: etatVers(m.dateMaj, 6, 3), max: 6,
+           constat: m.dateMaj === "present" ? "Date de modification pr\u00e9sente" : "Date de modification absente" });
+
+  // --- Bloc 2 : extractibilite des passages (55 points) ---
+  // C'est le coeur de la citation dans un AI Overview : le moteur reprend un passage,
+  // pas une page entiere.
+  d.push({ critere: "Donn\u00e9es chiffr\u00e9es par page", obtenu: pts(m.chiffresMoyen, [[4,14],[3,11],[2,8],[1,4]]), max: 14,
+           constat: m.chiffresMoyen + " donn\u00e9e(s) chiffr\u00e9e(s) en moyenne" });
+  d.push({ critere: "Listes et tableaux", obtenu: pts(m.listesMoyen, [[3,12],[2,9],[1,6]]), max: 12,
+           constat: m.listesMoyen + " liste(s) ou tableau(x) par page" });
+  d.push({ critere: "Longueur des paragraphes",
+           obtenu: (m.paraMoyen >= 25 && m.paraMoyen <= 70) ? 12 : ((m.paraMoyen >= 18 && m.paraMoyen <= 95) ? 7 : 2), max: 12,
+           constat: m.paraMoyen + " mots par paragraphe en moyenne" });
+  d.push({ critere: "R\u00e9ponse d\u00e8s l'ouverture", obtenu: m.ouverturesDirectes > 0 ? 9 : 0, max: 9,
+           constat: m.ouverturesDirectes > 0 ? "Le premier paragraphe r\u00e9pond directement" : "Le premier paragraphe ne r\u00e9pond pas directement" });
+  d.push({ critere: "Sous-titres formul\u00e9s en question", obtenu: pts(m.partQuestions, [[30,8],[15,5],[1,3]]), max: 8,
+           constat: m.partQuestions + " % des sous-titres sont des questions" });
+
+  // --- Bloc 3 : formats de reponse directe (15 points) ---
+  d.push({ critere: "Balisage FAQ ou HowTo", obtenu: etatVers(m.balisageFAQ, 8, 4), max: 8,
+           constat: m.balisageFAQ === "present" ? "Balisage de r\u00e9ponse directe pr\u00e9sent" : "Aucun balisage de r\u00e9ponse directe" });
+  d.push({ critere: "Sous-titres par page", obtenu: pts(m.sousTitresMoyen, [[5,7],[3,5],[1,3]]), max: 7,
            constat: m.sousTitresMoyen + " sous-titre(s) en moyenne" });
-  d.push({ critere: "Longueur des articles", obtenu: pts(m.motsMoyen, [[1200,10],[600,8],[300,5]]), max: 10,
-           constat: m.motsMoyen + " mots en moyenne" });
 
   const total = d.reduce(function (a, x) { return a + x.obtenu; }, 0);
   return { score: total, detail: d };
@@ -170,19 +187,19 @@ function scoreLLM(m, robots) {
   if (robots && robots.dispo) {
     const ouverts = robots.nbTotal - robots.nbBloques;
     ptsAcces = Math.round((ouverts / robots.nbTotal) * 40);
-    constatAcces = ouverts + " robot(s) IA sur " + robots.nbTotal + " ont acces au site";
+    constatAcces = ouverts + " robot(s) IA sur " + robots.nbTotal + " ont acc\u00e8s au site";
   } else {
-    constatAcces = "Fichier robots.txt non lisible, acces non verifiable";
+    constatAcces = "Fichier robots.txt non lisible, acc\u00e8s non v\u00e9rifiable";
   }
-  d.push({ critere: "Acces des robots IA", obtenu: ptsAcces, max: 40, constat: constatAcces });
+  d.push({ critere: "Acc\u00e8s des robots IA", obtenu: ptsAcces, max: 40, constat: constatAcces });
 
-  d.push({ critere: "Auteur declare dans les donnees structurees", obtenu: etatVers(m.auteurBalise, 20, 10), max: 20,
+  d.push({ critere: "Auteur d\u00e9clar\u00e9 dans les donn\u00e9es structur\u00e9es", obtenu: etatVers(m.auteurBalise, 20, 10), max: 20,
            constat: m.auteurBalise === "present" ? "Auteur identifiable par les machines" : "Auteur non identifiable par les machines" });
   d.push({ critere: "Balisage Article ou NewsArticle", obtenu: etatVers(m.balisageArticle, 15, 8), max: 15,
-           constat: m.balisageArticle === "present" ? "Contenu identifie comme article" : "Contenu non identifie comme article" });
-  d.push({ critere: "Date de mise a jour declaree", obtenu: etatVers(m.dateMaj, 10, 5), max: 10,
-           constat: m.dateMaj === "present" ? "Actualisation explicite" : "Actualisation non declaree" });
-  d.push({ critere: "Longueur des articles", obtenu: pts(m.motsMoyen, [[1200,15],[600,11],[300,6]]), max: 15,
+           constat: m.balisageArticle === "present" ? "Contenu identifi\u00e9 comme article" : "Contenu non identifi\u00e9 comme article" });
+  d.push({ critere: "Date de mise \u00e0 jour d\u00e9clar\u00e9e", obtenu: etatVers(m.dateMaj, 10, 5), max: 10,
+           constat: m.dateMaj === "present" ? "Actualisation explicite" : "Actualisation non d\u00e9clar\u00e9e" });
+  d.push({ critere: "Longueur des pages", obtenu: pts(m.motsMoyen, [[1200,15],[600,11],[300,6]]), max: 15,
            constat: m.motsMoyen + " mots en moyenne" });
 
   const total = d.reduce(function (a, x) { return a + x.obtenu; }, 0);
@@ -227,7 +244,7 @@ const UA = { "user-agent": "ReadrDiagnostic/1.0 (+https://www.readr.agency)" };
 
 async function getHTML(u, ms) {
   const ctrl = new AbortController();
-  const timer = setTimeout(function () { ctrl.abort(); }, ms || 3000);
+  const timer = setTimeout(function () { ctrl.abort(); }, ms || 2500);
   try {
     const r = await fetch(u, { signal: ctrl.signal, redirect: "follow", headers: UA });
     clearTimeout(timer);
@@ -288,7 +305,7 @@ function trouverArticles(html, origin) {
   }
 
   // On privilegie les candidats nets, puis on complete avec les replis.
-  return forts.concat(faibles).slice(0, 2);
+  return forts.concat(faibles).slice(0, 5);
 }
 
 // Analyse une page article et en extrait les signaux mesurables.
@@ -297,6 +314,8 @@ function analyserPage(html) {
     schemaArticle: false, schemaAuteur: false, schemaDatePub: false, schemaDateMaj: false,
     auteurVisible: false, dateVisible: false,
     h1: 0, h2: 0, paragraphes: 0, mots: 0, chiffres: 0,
+    listes: 0, tableaux: 0, schemaFAQ: false, titresTotal: 0, titresQuestion: 0,
+    parasUtiles: 0, paraMoyen: 0, ouvertureDirecte: false, passage: "", passageNote: 0,
   };
   if (!html) return res;
 
@@ -335,6 +354,57 @@ function analyserPage(html) {
   res.h2 = (html.match(/<h2[\s>]/gi) || []).length;
   res.paragraphes = (html.match(/<p[\s>]/gi) || []).length;
 
+  // --- Signaux d'extractibilite : ce qui permet a un AI Overview de reprendre un passage ---
+
+  // Listes et tableaux : formats que les moteurs reprennent en priorite
+  res.listes = (html.match(/<ul[\s>]/gi) || []).length + (html.match(/<ol[\s>]/gi) || []).length;
+  res.tableaux = (html.match(/<table[\s>]/gi) || []).length;
+
+  // Balisage FAQ ou HowTo : concu pour la reponse directe
+  res.schemaFAQ = /"@type"\s*:\s*"(FAQPage|HowTo|QAPage)"/i.test(html);
+
+  // Sous-titres formules en question : structure question/reponse
+  const titres = (html.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/gi) || [])
+    .map(function (t) { return texteVisible(t); })
+    .filter(function (t) { return t.length > 3; });
+  res.titresTotal = titres.length;
+  res.titresQuestion = titres.filter(function (t) { return t.indexOf("?") !== -1; }).length;
+
+  // Paragraphes : longueur et extractibilite
+  const paras = (html.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || [])
+    .map(function (t) { return texteVisible(t); })
+    .filter(function (t) { return t.split(/\s+/).length >= 8; });
+
+  res.parasUtiles = paras.length;
+  if (paras.length) {
+    const longueurs = paras.map(function (t) { return t.split(/\s+/).length; });
+    res.paraMoyen = Math.round(longueurs.reduce(function (a, b) { return a + b; }, 0) / longueurs.length);
+
+    // Reponse des l'ouverture : le premier paragraphe est court et informatif
+    const premier = paras[0];
+    const motsPremier = premier.split(/\s+/).length;
+    res.ouvertureDirecte = motsPremier <= 60 && /\d/.test(premier);
+
+    // Meilleur passage extractible : autonome, calibre, avec une donnee
+    const candidats = paras
+      .map(function (t) {
+        const mots = t.split(/\s+/).length;
+        let note = 0;
+        if (mots >= 25 && mots <= 70) note += 3;
+        else if (mots >= 18 && mots <= 90) note += 1;
+        if (/\d/.test(t)) note += 2;
+        if (/\d+\s?(%|euros?|millions?|milliards?)/i.test(t)) note += 1;
+        if (!/^(mais|or|donc|ainsi|pourtant|cependant|il|elle|ils|elles|ce|cette|cela)\b/i.test(t)) note += 1;
+        return { texte: t, note: note, mots: mots };
+      })
+      .sort(function (a, b) { return b.note - a.note; });
+
+    if (candidats.length && candidats[0].note >= 4) {
+      res.passage = candidats[0].texte.slice(0, 400);
+      res.passageNote = candidats[0].note;
+    }
+  }
+
   const texte = texteVisible(html);
   res.mots = texte ? texte.split(/\s+/).length : 0;
   res.chiffres = (texte.match(/\b\d[\d\s.,]*\s*(%|euros?|EUR|\u20ac|millions?|milliards?|ans?)\b/gi) || []).length
@@ -344,7 +414,7 @@ function analyserPage(html) {
 }
 
 async function lireSite(origin) {
-  const rep = await getHTML(origin, 3000);
+  const rep = await getHTML(origin, 2500);
   if (!rep) return { dispo: false, raison: "page d'accueil illisible" };
   const accueil = rep.html;
 
@@ -353,14 +423,14 @@ async function lireSite(origin) {
 
   const urls = trouverArticles(accueil, originFinal);
   // En parallele : deux articles coutent le meme temps qu'un seul.
-  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 3000); }));
+  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 2500); }));
   const pages = [];
   reps.forEach(function (h, i) {
-    if (h) pages.push({ url: urls[i], mesures: analyserPage(h.html), extrait: texteVisible(h.html).slice(0, 700) });
+    if (h) pages.push({ url: urls[i], mesures: analyserPage(h.html), extrait: texteVisible(h.html).slice(0, 450) });
   });
 
   if (!pages.length) {
-    return { dispo: false, raison: "aucun article accessible", nbArticles: 0, originFinal: originFinal };
+    return { dispo: false, raison: "aucun article accessible", nbPages: 0, originFinal: originFinal };
   }
 
   const n = pages.length;
@@ -373,13 +443,21 @@ async function lireSite(origin) {
     a.auteurVisible += m.auteurVisible ? 1 : 0;
     a.dateVisible += m.dateVisible ? 1 : 0;
     a.mots += m.mots; a.chiffres += m.chiffres; a.h2 += m.h2; a.paragraphes += m.paragraphes;
+    a.listes += m.listes; a.tableaux += m.tableaux;
+    a.schemaFAQ += m.schemaFAQ ? 1 : 0;
+    a.titresTotal += m.titresTotal; a.titresQuestion += m.titresQuestion;
+    a.ouvertureDirecte += m.ouvertureDirecte ? 1 : 0;
+    if (m.paraMoyen) { a.paraSomme += m.paraMoyen; a.paraCount += 1; }
+    if (m.passageNote > a.meilleureNote) { a.meilleureNote = m.passageNote; a.passage = m.passage; }
     return a;
   }, { schemaArticle:0, schemaAuteur:0, schemaDatePub:0, schemaDateMaj:0, auteurVisible:0,
-       dateVisible:0, mots:0, chiffres:0, h2:0, paragraphes:0 });
+       dateVisible:0, mots:0, chiffres:0, h2:0, paragraphes:0,
+       listes:0, tableaux:0, schemaFAQ:0, titresTotal:0, titresQuestion:0,
+       ouvertureDirecte:0, paraSomme:0, paraCount:0, meilleureNote:0, passage:"" });
 
   return {
     dispo: true,
-    nbArticles: n,
+    nbPages: n,
     originFinal: originFinal,
     urls: pages.map(function (p) { return p.url; }),
     extraits: pages.map(function (p) { return p.extrait; }),
@@ -391,6 +469,14 @@ async function lireSite(origin) {
     motsMoyen: Math.round(agg.mots / n),
     chiffresMoyen: Math.round((agg.chiffres / n) * 10) / 10,
     sousTitresMoyen: Math.round(agg.h2 / n),
+
+    // Signaux d'extractibilite, propres a l'AI Overview
+    listesMoyen: Math.round(((agg.listes + agg.tableaux) / n) * 10) / 10,
+    balisageFAQ: agg.schemaFAQ > 0 ? "present" : "absent",
+    partQuestions: agg.titresTotal ? Math.round((agg.titresQuestion / agg.titresTotal) * 100) : 0,
+    paraMoyen: agg.paraCount ? Math.round(agg.paraSomme / agg.paraCount) : 0,
+    ouverturesDirectes: agg.ouvertureDirecte,
+    passage: agg.passage || "",
   };
 }
 
@@ -570,9 +656,11 @@ exports.handler = async function (event) {
     "Contenus attendus :",
     "- verdict : une phrase de 18 mots maximum, coh\u00e9rente avec les deux scores fournis.",
     "- aio.enjeu et llm.enjeu : deux phrases chacun, exprim\u00e9es en trafic, audience et abonnement.",
-    "- aio.requete : une question r\u00e9elle qu'un lecteur taperait sur Google, en lien avec les extraits fournis.",
-    "- aio.apercu : la r\u00e9ponse que produirait un AI Overview \u00e0 cette question, en trois phrases.",
-    "- aio.citationRaison et llm.raison : une phrase chacune, appuy\u00e9e sur les mesures fournies.",
+    "- aio.requete : une question SANS AUCUN NOM DE MARQUE, telle qu'un internaute la taperait sur Google en cherchant l'information et non l'entreprise. Interdiction absolue d'y faire figurer le nom du site analys\u00e9 ou celui d'un concurrent. Une requ\u00eate de marque ne teste rien, puisque la marque y appara\u00eet m\u00e9caniquement. Exemple correct pour un service de musique : comment \u00e9couter de la musique en qualit\u00e9 studio sur plusieurs appareils.",
+    "- aio.apercu : la r\u00e9ponse que produirait un AI Overview \u00e0 cette question, en trois phrases, sans citer de marque.",
+    "- aio.autresRequetes : trois autres questions sans marque, sur lesquelles ce site se joue sa visibilit\u00e9. Varie les intentions : une question pratique, une question de comparaison, une question d'actualit\u00e9 ou de contexte. Appuie-toi sur les extraits fournis.",
+    "- aio.citationRaison : une phrase expliquant si les pages du site seraient retenues comme SOURCE de cette r\u00e9ponse. \u00catre mentionn\u00e9 dans un texte et \u00eatre cit\u00e9 comme source sont deux choses diff\u00e9rentes : tu ne parles que de la seconde.",
+    "- llm.raison : une phrase appuy\u00e9e sur les mesures fournies.",
     "- explications : exactement autant d'entr\u00e9es que de crit\u00e8res fournis, dans le M\u00caME ORDRE. Pour chacune, pourquoi ce crit\u00e8re compte pour la citation (une phrase) et l'action \u00e0 mener (une phrase op\u00e9rationnelle).",
     "- recos : exactement 6 actions, de la plus prioritaire \u00e0 la moins prioritaire, d\u00e9duites des crit\u00e8res les plus faibles.",
   ].join("\n");
@@ -633,7 +721,7 @@ exports.handler = async function (event) {
       const cle = c.nom.toLowerCase();
       if (vus[cle]) return false;
       vus[cle] = true;
-      if (compte[cle] > 1) c.perimetre = "Les deux";
+      if (compte[cle] > 1) c.perimetre = "Google et assistants IA";
       return true;
     })
     .sort(function (a, b) { return (b.max - b.obtenu) - (a.max - a.obtenu); })
