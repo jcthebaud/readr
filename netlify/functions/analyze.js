@@ -17,16 +17,14 @@ const SCHEMA = {
   properties: {
     site: { type: "STRING" },
     verdict: { type: "STRING" },
+    dependance: { type: "STRING" },
     aio: {
       type: "OBJECT",
       properties: {
         enjeu: { type: "STRING" },
-        requete: { type: "STRING" },
-        apercu: { type: "STRING" },
         citationRaison: { type: "STRING" },
-        autresRequetes: { type: "ARRAY", items: { type: "STRING" } },
       },
-      required: ["enjeu", "requete", "apercu", "citationRaison", "autresRequetes"],
+      required: ["enjeu", "citationRaison"],
     },
     llm: {
       type: "OBJECT",
@@ -71,11 +69,11 @@ const SCHEMA = {
       },
     },
   },
-  required: ["site", "verdict", "aio", "llm", "explications", "reecritures", "recos"],
+  required: ["site", "verdict", "dependance", "aio", "llm", "explications", "reecritures", "recos"],
 };
 
 // --------- Assemblage : mesures calculees + redaction du modele ---------
-function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, redirige, mode) {
+function assembler(txt, calcAIO, calcLLM, calcPresse, calcIndep, criteres, robots, site, hostFinal, redirige, mode) {
   const d = (txt && typeof txt === "object") ? txt : {};
   const aio = d.aio || {};
   const llm = d.llm || {};
@@ -98,6 +96,7 @@ function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, red
   return {
     site: d.site || "",
     verdict: d.verdict || "",
+    dependance: d.dependance || "",
     mesurable: !!calcAIO,
     aio: calcAIO ? {
       score: calcAIO.score,
@@ -105,10 +104,11 @@ function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, red
       malus: calcAIO.malus,
       detail: calcAIO.detail,
       enjeu: aio.enjeu || "",
-      requete: aio.requete || "",
-      apercu: aio.apercu || "",
-      autresRequetes: Array.isArray(aio.autresRequetes) ? aio.autresRequetes.slice(0, 3) : [],
       passage: (site && site.passage) || "",
+      ouverture: (site && site.ouverture) || "",
+      ouvertureMots: site ? site.ouvertureMots : 0,
+      ouvertureChiffre: site ? site.ouvertureChiffre : false,
+      ouvertureRenvoi: site ? site.ouvertureRenvoi : false,
       citation: { verdict: verdictCitation(calcAIO.score), raison: aio.citationRaison || "" },
     } : null,
     llm: calcLLM ? {
@@ -122,6 +122,9 @@ function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, red
                  : "indetermine",
                note: "" },
     } : null,
+    presse: calcPresse ? { score: calcPresse.score, detail: calcPresse.detail } : null,
+    independance: calcIndep ? { score: calcIndep.score, detail: calcIndep.detail,
+                                reseaux: (site && site.audience) ? site.audience.reseaux : 0 } : null,
     signaux: signaux,
     recos: Array.isArray(d.recos) ? d.recos : [],
     reecritures: Array.isArray(d.reecritures) ? d.reecritures.slice(0, 3) : [],
@@ -364,17 +367,28 @@ function trouverArticles(html, origin) {
   }
 
   // On privilegie les candidats nets, puis on complete avec les replis.
-  return forts.concat(faibles).slice(0, 5);
+  // On demande plus de candidats que necessaire : les pages lourdes ou protegees
+  // echouent souvent, et les requetes etant paralleles, le surcout de temps est nul.
+  return forts.concat(faibles).slice(0, 12);
 }
 
 // Analyse une page article et en extrait les signaux mesurables.
+// Une page de rubrique ou d'accueil fausse toutes les mesures : on l'ecarte.
+// Un article se reconnait a son balisage, ou a defaut a sa densite redactionnelle.
+function estUnArticle(m) {
+  if (m.schemaArticle) return true;
+  return m.parasUtiles >= 5 && m.mots >= 250 && m.h1 >= 1;
+}
+
 function analyserPage(html) {
   const res = {
     schemaArticle: false, schemaAuteur: false, schemaDatePub: false, schemaDateMaj: false,
     auteurVisible: false, dateVisible: false,
     h1: 0, h2: 0, paragraphes: 0, mots: 0, chiffres: 0,
     listes: 0, tableaux: 0, schemaFAQ: false, titresTotal: 0, titresQuestion: 0,
-    parasUtiles: 0, paraMoyen: 0, ouvertureDirecte: false, passage: "", passageNote: 0,
+    parasUtiles: 0, paraMoyen: 0, ouvertureDirecte: false, ouverture: "", ouvertureMots: 0,
+    ouvertureChiffre: false, ouvertureRenvoi: false, passage: "", passageNote: 0,
+    schemaNews: false, pageAuteur: false, genreDeclare: false, citations: 0, sourcesPrimaires: 0,
     schemaAuteurTexte: false, noindex: false, nosnippet: false, maxSnippet: null, paywall: false,
     h1Unique: false, sautNiveau: false, sameAs: false, breadcrumb: false,
   };
@@ -416,6 +430,30 @@ function analyserPage(html) {
   res.h1 = (html.match(/<h1[\s>]/gi) || []).length;
   res.h2 = (html.match(/<h2[\s>]/gi) || []).length;
   res.paragraphes = (html.match(/<p[\s>]/gi) || []).length;
+
+  // --- Signaux propres au metier de la presse ---
+  // Ces elements ne sont pas regardes par les outils GEO generiques, alors qu'ils
+  // determinent la reprise des contenus d'actualite.
+
+  // Le balisage NewsArticle est celui attendu pour la presse : Article seul est plus faible.
+  res.schemaNews = /"@type"\s*:\s*("NewsArticle"|\[[^\]]*"NewsArticle")/i.test(html);
+
+  // Signature reliee a une page auteur : c'est ce qui construit l'autorite journalistique.
+  res.pageAuteur = /<a[^>]+href=["'][^"']*\/(auteur|auteurs|author|authors|journaliste|redaction)\//i.test(html);
+
+  // Type d'article declare : reportage, enquete, analyse. Un signal d'expertise editoriale.
+  res.genreDeclare = /"articleSection"\s*:|"genre"\s*:|"@type"\s*:\s*"(ReportageNewsArticle|AnalysisNewsArticle|OpinionNewsArticle|BackgroundNewsArticle)"/i.test(html);
+
+  // Citations sourcees : verbatim entre guillemets, marqueur du travail journalistique
+  // et matiere premiere reprise par les moteurs.
+  res.citations = (html.match(/<(blockquote|q)[\s>]/gi) || []).length
+                + ((html.match(/\u00ab[^\u00bb]{25,400}\u00bb/g) || []).length);
+
+  // Liens vers des sources primaires (institutions, etudes, textes officiels)
+  const liensSortants = (html.match(/<a\s[^>]*href=["']https?:\/\/[^"']+["']/gi) || []);
+  res.sourcesPrimaires = liensSortants.filter(function (l) {
+    return /\.(gouv\.fr|europa\.eu|who\.int|oecd\.org|insee\.fr|banque-france\.fr|legifrance\.gouv\.fr|ademe\.fr|senat\.fr|assemblee-nationale\.fr)|\/(etude|rapport|communique)/i.test(l);
+  }).length;
 
   // --- Bloqueurs d'extraction : ils empechent la citation quel que soit le contenu ---
 
@@ -468,10 +506,14 @@ function analyserPage(html) {
     const longueurs = paras.map(function (t) { return t.split(/\s+/).length; });
     res.paraMoyen = Math.round(longueurs.reduce(function (a, b) { return a + b; }, 0) / longueurs.length);
 
-    // Reponse des l'ouverture : le premier paragraphe est court et informatif
+    // Paragraphe d'ouverture : c'est lui qui sert de reponse directe, ou non.
     const premier = paras[0];
     const motsPremier = premier.split(/\s+/).length;
-    res.ouvertureDirecte = motsPremier <= 60 && /\d/.test(premier);
+    res.ouverture = premier.slice(0, 400);
+    res.ouvertureMots = motsPremier;
+    res.ouvertureChiffre = /\d/.test(premier);
+    res.ouvertureRenvoi = /^(mais|or|donc|ainsi|pourtant|cependant|il|elle|ils|elles|ce|cet|cette|cela|celui|celle|c'est|y|en)\b/i.test(premier.trim());
+    res.ouvertureDirecte = motsPremier <= 60 && res.ouvertureChiffre && !res.ouvertureRenvoi;
 
     // Meilleur passage extractible : autonome, calibre, avec une donnee
     const candidats = paras
@@ -526,16 +568,36 @@ async function lireSite(origin) {
   try { originFinal = new URL(rep.urlFinale).origin; } catch (e) {}
 
   const urls = trouverArticles(accueil, originFinal);
-  // En parallele : deux articles coutent le meme temps qu'un seul.
-  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 2500); }));
-  const pages = [];
+  // En parallele : douze pages coutent le meme temps qu'une seule.
+  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 3500); }));
+
+  let atteintes = 0;
+  const candidates = [];
   reps.forEach(function (h, i) {
-    if (h) pages.push({ url: urls[i], mesures: analyserPage(h.html), extrait: texteVisible(h.html).slice(0, 450) });
+    if (!h) return;
+    atteintes++;
+    const mes = analyserPage(h.html);
+    if (!estUnArticle(mes)) return;                  // rubrique, accueil, page de service
+    candidates.push({ url: urls[i], mesures: mes, extrait: texteVisible(h.html).slice(0, 450) });
   });
 
+  // On privilegie les pages balisees, puis les plus fournies, et on en garde cinq.
+  candidates.sort(function (a, b) {
+    if (a.mesures.schemaArticle !== b.mesures.schemaArticle) return a.mesures.schemaArticle ? -1 : 1;
+    return b.mesures.mots - a.mesures.mots;
+  });
+  const pages = candidates.slice(0, 5);
+
   if (!pages.length) {
-    return { dispo: false, raison: "aucun article accessible", nbPages: 0, originFinal: originFinal };
+    return {
+      dispo: false,
+      raison: atteintes ? "aucune page article identifiee" : "pages inaccessibles",
+      nbPages: 0, nbTentees: urls.length, nbAtteintes: atteintes, originFinal: originFinal,
+    };
   }
+
+  // Les signaux d'audience propre se trouvent surtout dans l'entete et le pied de page.
+  const audience = analyserAudience(accueil + " " + (reps.find(function (x) { return x; }) || { html: "" }).html);
 
   const n = pages.length;
   const agg = pages.reduce(function (a, p) {
@@ -560,19 +622,32 @@ async function lireSite(origin) {
     a.sameAs += m.sameAs ? 1 : 0;
     a.breadcrumb += m.breadcrumb ? 1 : 0;
     a.auteurTexte += m.schemaAuteurTexte ? 1 : 0;
+    a.schemaNews += m.schemaNews ? 1 : 0;
+    a.pageAuteur += m.pageAuteur ? 1 : 0;
+    a.genreDeclare += m.genreDeclare ? 1 : 0;
+    a.citations += m.citations;
+    a.sourcesPrimaires += m.sourcesPrimaires;
     if (m.paraMoyen) { a.paraSomme += m.paraMoyen; a.paraCount += 1; }
     if (m.passageNote > a.meilleureNote) { a.meilleureNote = m.passageNote; a.passage = m.passage; }
+    if (!a.ouverture && m.ouverture) {
+      a.ouverture = m.ouverture; a.ouvertureMots = m.ouvertureMots;
+      a.ouvertureChiffre = m.ouvertureChiffre; a.ouvertureRenvoi = m.ouvertureRenvoi;
+    }
     return a;
   }, { schemaArticle:0, schemaAuteur:0, schemaDatePub:0, schemaDateMaj:0, auteurVisible:0,
        dateVisible:0, mots:0, chiffres:0, h2:0, paragraphes:0,
        listes:0, tableaux:0, schemaFAQ:0, titresTotal:0, titresQuestion:0,
        ouvertureDirecte:0, paraSomme:0, paraCount:0, meilleureNote:0, passage:"",
        noindex:0, nosnippet:0, snippetZero:0, paywall:0, h1Unique:0, sautNiveau:0,
-       sameAs:0, breadcrumb:0, auteurTexte:0 });
+       sameAs:0, breadcrumb:0, auteurTexte:0,
+       ouverture:"", ouvertureMots:0, ouvertureChiffre:false, ouvertureRenvoi:false,
+       schemaNews:0, pageAuteur:0, genreDeclare:0, citations:0, sourcesPrimaires:0 });
 
   return {
     dispo: true,
     nbPages: n,
+    nbTentees: urls.length,
+    nbAtteintes: atteintes,
     originFinal: originFinal,
     urls: pages.map(function (p) { return p.url; }),
     extraits: pages.map(function (p) { return p.extrait; }),
@@ -594,6 +669,10 @@ async function lireSite(origin) {
     paraMoyen: agg.paraCount ? Math.round(agg.paraSomme / agg.paraCount) : 0,
     ouverturesDirectes: agg.ouvertureDirecte,
     passage: agg.passage || "",
+    ouverture: agg.ouverture || "",
+    ouvertureMots: agg.ouvertureMots,
+    ouvertureChiffre: agg.ouvertureChiffre,
+    ouvertureRenvoi: agg.ouvertureRenvoi,
 
     // Bloqueurs et hygiene technique
     noindex: agg.noindex > 0,
@@ -605,9 +684,202 @@ async function lireSite(origin) {
     liageEntite: niveau(agg.sameAs, n),
     filAriane: niveau(agg.breadcrumb, n),
     auteurTexteSeul: agg.auteurTexte > 0,
+
+    // Independance vis-a-vis des plateformes
+    audience: audience,
+
+    // Signaux propres a la presse
+    balisageNews: niveau(agg.schemaNews, n),
+    pageAuteur: niveau(agg.pageAuteur, n),
+    genreDeclare: niveau(agg.genreDeclare, n),
+    citationsMoyen: Math.round((agg.citations / n) * 10) / 10,
+    sourcesMoyen: Math.round((agg.sourcesPrimaires / n) * 10) / 10,
   };
 }
 
+
+
+
+// --------- Mesure de l'independance vis-a-vis des plateformes ---------
+// Ce que le media possede en propre : capture d'audience, compte, abonnement.
+// C'est la seule reponse structurelle a la dependance aux moteurs.
+function analyserAudience(html) {
+  const r = {
+    newsletter: false, formulaireEmail: false, compte: false, abonnement: false,
+    appMobile: false, push: false, cmp: false, reseaux: 0,
+  };
+  if (!html) return r;
+
+  // Capture newsletter : lien dedie ou formulaire email present
+  r.newsletter = /href=["'][^"']*\/(newsletter|newsletters|infolettre)/i.test(html)
+              || /(inscri\w+|abonn\w+)[^<]{0,40}newsletter/i.test(html);
+  r.formulaireEmail = /<input[^>]+type=["']email["']/i.test(html)
+                   || /<input[^>]+name=["'][^"']*(email|mail)[^"']*["']/i.test(html);
+
+  // Espace compte : la connexion est le socle d'une relation identifiee
+  r.compte = /href=["'][^"']*\/(login|connexion|se-connecter|mon-compte|moncompte|account|espace-client)/i.test(html)
+          || /(se\s+connecter|mon\s+compte|s'identifier)/i.test(html);
+
+  // Offre d'abonnement
+  r.abonnement = /href=["'][^"']*\/(abonnement|abonnements|abonnez|offres|s-abonner|subscribe|premium)/i.test(html)
+              || /(s'abonner|nos\s+offres|devenir\s+abonn)/i.test(html);
+
+  // Application mobile
+  r.appMobile = /(apps\.apple\.com|itunes\.apple\.com|play\.google\.com\/store\/apps)/i.test(html);
+
+  // Notifications push : canal direct, sans intermediaire
+  r.push = /(onesignal|batch\.com|batchsdk|pushwoosh|serviceWorker[\s\S]{0,120}push|firebase-messaging)/i.test(html);
+
+  // Plateforme de consentement : prerequis d'une collecte de donnees propres
+  r.cmp = /(didomi|sirdata|onetrust|axeptio|tarteaucitron|sfbx|appconsent|quantcast|commandersact)/i.test(html);
+
+  // Canaux non maitrises, pour mise en perspective
+  r.reseaux = (html.match(/href=["'][^"']*(facebook\.com|twitter\.com|x\.com|instagram\.com|tiktok\.com|linkedin\.com|youtube\.com)/gi) || []).length;
+
+  return r;
+}
+
+// --------- Grille editoriale : specifique au metier de la presse ---------
+// Ces criteres ne figurent pas dans les outils GEO generiques. Ils portent sur
+// ce qui fait l'autorite d'un media aux yeux d'un moteur de reponse.
+function scorePresse(m) {
+  const d = [];
+  d.push({ critere: "Balisage NewsArticle", obtenu: etatVers(m.balisageNews, 25, 12), max: 25,
+           constat: m.balisageNews === "present" ? "Vos articles sont declares comme contenu de presse"
+                  : (m.balisageNews === "partiel" ? "Une partie seulement de vos articles est declaree comme presse" : "Vos articles sont balises Article, pas NewsArticle") });
+  d.push({ critere: "Signature reliee a une page auteur", obtenu: etatVers(m.pageAuteur, 20, 10), max: 20,
+           constat: m.pageAuteur === "present" ? "Les signatures renvoient vers une page journaliste" : "Les signatures ne renvoient vers aucune page journaliste" });
+  d.push({ critere: "Liens vers des sources primaires", obtenu: pts(m.sourcesMoyen, [[3,20],[2,15],[1,9]]), max: 20,
+           constat: m.sourcesMoyen + " lien(s) vers institutions, etudes ou textes officiels par article" });
+  d.push({ critere: "Citations et verbatims", obtenu: pts(m.citationsMoyen, [[3,20],[2,15],[1,9]]), max: 20,
+           constat: m.citationsMoyen + " citation(s) sourcee(s) par article" });
+  d.push({ critere: "Genre editorial declare", obtenu: etatVers(m.genreDeclare, 15, 8), max: 15,
+           constat: m.genreDeclare === "present" ? "Le type d'article est declare (reportage, enquete, analyse)" : "Aucun genre editorial n'est declare dans le balisage" });
+
+  const total = d.reduce(function (a, x) { return a + x.obtenu; }, 0);
+  return { score: total, detail: d };
+}
+
+
+
+// --------- Grille d'independance : ce que le media possede en propre ---------
+// Les trois grilles precedentes mesurent une exposition a des plateformes que le media
+// ne controle pas. Celle-ci mesure sa capacite a s'en affranchir.
+function scoreIndependance(a) {
+  const d = [];
+  const b = function (v, plein) { return v ? plein : 0; };
+
+  d.push({ critere: "Offre de newsletters identifiable", obtenu: b(a.newsletter, 20), max: 20,
+           constat: a.newsletter ? "Un espace newsletters est accessible depuis le site" : "Aucun espace newsletters reperable" });
+  d.push({ critere: "Formulaire de collecte d'adresses", obtenu: b(a.formulaireEmail, 15), max: 15,
+           constat: a.formulaireEmail ? "Un champ de collecte d'adresses est present" : "Aucun formulaire de collecte reperable" });
+  d.push({ critere: "Espace compte et connexion", obtenu: b(a.compte, 20), max: 20,
+           constat: a.compte ? "Un espace compte permet d'identifier le lecteur" : "Aucun espace compte reperable : les lecteurs restent anonymes" });
+  d.push({ critere: "Offre d'abonnement", obtenu: b(a.abonnement, 20), max: 20,
+           constat: a.abonnement ? "Une offre d'abonnement est accessible" : "Aucune offre d'abonnement reperable" });
+  d.push({ critere: "Notifications push", obtenu: b(a.push, 10), max: 10,
+           constat: a.push ? "Un canal de notification directe est en place" : "Aucun canal de notification directe detecte" });
+  d.push({ critere: "Application mobile", obtenu: b(a.appMobile, 10), max: 10,
+           constat: a.appMobile ? "Une application mobile est proposee" : "Aucune application mobile reperee" });
+  d.push({ critere: "Plateforme de gestion du consentement", obtenu: b(a.cmp, 5), max: 5,
+           constat: a.cmp ? "Un dispositif de consentement est en place" : "Aucun dispositif de consentement detecte" });
+
+  const total = d.reduce(function (x, y) { return x + y.obtenu; }, 0);
+  return { score: total, detail: d };
+}
+
+// --------- Controle anti-invention ---------
+// Une consigne de prompt n'est pas une garantie. Ce controle verifie mecaniquement
+// que le modele n'a introduit aucune statistique fabriquee, et neutralise ce qui
+// ne peut pas etre justifie. Mieux vaut un champ vide qu'un chiffre faux.
+
+// Regle stricte pour les champs d'interpretation : AUCUN chiffre.
+// Leur role est d'expliquer un constat, jamais de le quantifier. Les seuls chiffres
+// du rapport sont ceux que le code a mesures ou calcules.
+// Cette regle attrape aussi les comparaisons du type "trois fois moins que la moyenne".
+const RE_CHIFFRE = /\d/;
+const RE_COMPARAISON = /\b(deux|trois|quatre|cinq|six|sept|huit|neuf|dix|moitie|double|triple)\s+(fois|points?)\b/i;
+
+function contientChiffre(t) {
+  return typeof t === "string" && (RE_CHIFFRE.test(t) || RE_COMPARAISON.test(t));
+}
+
+// Motifs de statistique, tolerance plus large pour les champs d'action
+// ou un objectif chiffre est legitime (par exemple : sous 60 mots).
+const RE_STAT = /(\d[\d\s.,]*\s?%)|(\d[\d\s.,]*\s*(?:euros?|EUR|\u20ac|millions?|milliards?|dollars?))|(\bfois\s+(?:moins|plus)\b)/i;
+
+function nettoyerProse(t, journal, etiquette) {
+  if (!t) return "";
+  if (contientChiffre(t)) {
+    journal.push(etiquette);
+    return "";
+  }
+  return t;
+}
+
+// Pour une action, un objectif chiffre est utile : on ne retire que les statistiques.
+function nettoyerAction(t, journal, etiquette) {
+  if (!t) return "";
+  if (RE_STAT.test(t)) {
+    journal.push(etiquette);
+    return "";
+  }
+  return t;
+}
+
+// Extrait les nombres significatifs d'un texte.
+function nombresDe(t) {
+  return (String(t).match(/\d[\d\s.,]*/g) || [])
+    .map(function (x) { return x.replace(/[\s.,]/g, ""); })
+    .filter(function (x) { return x.length > 0; });
+}
+
+// Une reecriture ne peut contenir que des nombres presents dans les extraits d'origine.
+function reecritureValide(version, sourceConcatenee) {
+  const refs = nombresDe(sourceConcatenee);
+  const nb = nombresDe(version);
+  for (let i = 0; i < nb.length; i++) {
+    if (refs.indexOf(nb[i]) === -1) return false;   // nombre absent des pages du media
+  }
+  return true;
+}
+
+function controler(res, extraits) {
+  const journal = [];
+  const source = (extraits || []).join(" ");
+
+  res.verdict = nettoyerProse(res.verdict, journal, "verdict");
+  res.dependance = nettoyerProse(res.dependance, journal, "dependance");
+  if (res.aio) {
+    res.aio.enjeu = nettoyerProse(res.aio.enjeu, journal, "aio.enjeu");
+    if (res.aio.citation) {
+      res.aio.citation.raison = nettoyerProse(res.aio.citation.raison, journal, "aio.citation");
+    }
+  }
+  if (res.llm) {
+    res.llm.enjeu = nettoyerProse(res.llm.enjeu, journal, "llm.enjeu");
+    res.llm.raison = nettoyerProse(res.llm.raison, journal, "llm.raison");
+  }
+  (res.signaux || []).forEach(function (x, i) {
+    x.enjeu = nettoyerProse(x.enjeu, journal, "signal " + (i + 1));
+    x.action = nettoyerAction(x.action, journal, "action " + (i + 1));
+  });
+  (res.recos || []).forEach(function (x, i) {
+    x.detail = nettoyerAction(x.detail, journal, "reco " + (i + 1));
+  });
+
+  // Les reecritures citant un nombre absent des pages du media sont supprimees.
+  const avant = (res.reecritures || []).length;
+  res.reecritures = (res.reecritures || []).filter(function (r) {
+    const ok = reecritureValide(r.version, source);
+    if (!ok) journal.push("reecriture rejetee");
+    return ok;
+  });
+  if (avant !== res.reecritures.length) res.reecrituresRejetees = avant - res.reecritures.length;
+
+  res.controle = { champsNeutralises: journal.length, detail: journal };
+  return res;
+}
 
 // --------- Malus : les blocages qui annulent la citation ---------
 // Contrairement aux criteres positifs, ces elements empechent l'extraction
@@ -804,6 +1076,9 @@ exports.handler = async function (event) {
     "Tes interlocuteurs sont des directions marketing et produit de m\u00e9dias fran\u00e7ais. Ils connaissent le SEO, l'audience et l'abonnement, pas le jargon GEO.",
     "",
     "R\u00c8GLE ABSOLUE : tu ne produis AUCUN chiffre, AUCUN score, AUCUN \u00e9tat de crit\u00e8re.",
+    "R\u00c8GLE ABSOLUE : tu ne simules rien. Tu ne rediges aucune reponse d'IA fictive, aucune requete imaginaire, aucun exemple hypothetique. Le rapport ne doit contenir que des constats issus des mesures et des extraits fournis.",
+    "R\u00c8GLE ABSOLUE : tu ne commentes QUE les crit\u00e8res mesur\u00e9s qui te sont transmis. Tu n'affirmes rien sur ce qui n'a pas \u00e9t\u00e9 mesur\u00e9 : ni les reprises par des tiers, ni la notori\u00e9t\u00e9, ni les positions concurrentielles, ni le volume de trafic, ni la performance pass\u00e9e. Si un sujet n'appara\u00eet pas dans les mesures fournies, tu n'en parles pas.",
+    "R\u00c8GLE ABSOLUE : tu n'inventes jamais un fait attribuable au m\u00e9dia analys\u00e9. Tout chiffre, date, quantit\u00e9 ou nom propre que tu \u00e9cris doit provenir des extraits de leurs pages qui te sont fournis. Un fait invent\u00e9 et attribu\u00e9 \u00e0 un m\u00e9dia est la faute la plus grave que tu puisses commettre.",
     "Les scores et les constats te sont fournis, ils ont \u00e9t\u00e9 mesur\u00e9s sur les pages du site.",
     "Ton r\u00f4le est uniquement d'expliquer ce que ces mesures impliquent et de recommander des actions.",
     "Ne contredis jamais une mesure fournie. N'invente aucune donn\u00e9e qui ne t'a pas \u00e9t\u00e9 transmise.",
@@ -819,20 +1094,18 @@ exports.handler = async function (event) {
     "- Fran\u00e7ais professionnel, tous les accents correctement plac\u00e9s. Vouvoiement.",
     "- Interdiction absolue du tiret cadratin et du tiret demi-cadratin.",
     "- Pas de superlatifs marketing, pas de formules creuses.",
+    "- Ecris comme un consultant francais qui redige une note, pas comme une intelligence artificielle. Evite les constructions par opposition du type \'ce n'est pas X mais Y\', \'non pas X mais Y\', \'plutot que\'. Evite les mots d'emphase comme \'vraiment\', \'veritablement\', \'essentiel\'. Prefere des phrases affirmatives et concretes.",
     "- Chaque phrase apporte une information utile.",
     "",
     "Contenus attendus :",
     "- verdict : une phrase de 18 mots maximum, coh\u00e9rente avec les deux scores fournis.",
+    "- dependance : trois phrases, redigees simplement, comme un consultant qui parle a un directeur. Premiere phrase : ce que les scores mesures indiquent sur la part de leur visibilite qui depend de plateformes exterieures. Deuxieme phrase : ce que montrent les mesures d'independance qui te sont fournies, en nommant precisement ce qui est en place et ce qui manque (newsletter, compte, abonnement, notification). Troisieme phrase : la consequence concrete pour leur activite. Aucun chiffre. N'emploie jamais la construction \'ce n'est pas X, c'est Y\' ni \'plutot que\'. Ecris des phrases affirmatives simples.",
     "- aio.enjeu et llm.enjeu : deux phrases chacun, exprim\u00e9es en trafic, audience et abonnement.",
-    "- aio.requete : une question SANS AUCUN NOM DE MARQUE, telle qu'un internaute la taperait sur Google en cherchant l'information et non l'entreprise. Interdiction absolue d'y faire figurer le nom du site analys\u00e9 ou celui d'un concurrent. Une requ\u00eate de marque ne teste rien, puisque la marque y appara\u00eet m\u00e9caniquement. Exemple correct pour un service de musique : comment \u00e9couter de la musique en qualit\u00e9 studio sur plusieurs appareils.",
-    "- aio.apercu : la r\u00e9ponse que produirait un AI Overview \u00e0 cette question, en trois phrases, sans citer de marque.",
-    "- aio.autresRequetes : trois autres questions sans marque, sur lesquelles ce site se joue sa visibilit\u00e9. Varie les intentions : une question pratique, une question de comparaison, une question d'actualit\u00e9 ou de contexte. Appuie-toi sur les extraits fournis.",
-    "- aio.citationRaison : une phrase expliquant si les pages du site seraient retenues comme SOURCE de cette r\u00e9ponse. \u00catre mentionn\u00e9 dans un texte et \u00eatre cit\u00e9 comme source sont deux choses diff\u00e9rentes : tu ne parles que de la seconde.",
+    "- aio.citationRaison : une phrase qui explique, en s'appuyant uniquement sur les mesures fournies, ce qui favorise ou ce qui empeche la reprise de leurs pages comme source par Google. Tu ne decris aucune requete et aucune reponse imaginaire.",
     "- llm.raison : une phrase appuy\u00e9e sur les mesures fournies.",
-    "- IMPORTANT pour aio.requete et aio.autresRequetes : ce sont des phrases en fran\u00e7ais, pas des saisies clavier. Elles doivent porter tous leurs accents (\u00e9, \u00e8, \u00e0, \u00ea, \u00e7), commencer par une majuscule et se terminer par un point d'interrogation. Une requ\u00eate sans accents est une r\u00e9ponse invalide.",
     "- explications : exactement autant d'entr\u00e9es que de crit\u00e8res fournis, dans le M\u00caME ORDRE. Pour chacune, pourquoi ce crit\u00e8re compte pour la citation (une phrase) et l'action \u00e0 mener (une phrase op\u00e9rationnelle).",
-    "- recos : exactement 6 actions, de la plus prioritaire \u00e0 la moins prioritaire, d\u00e9duites des crit\u00e8res les plus faibles.",
-    "- reecritures : exactement 3 passages r\u00e9\u00e9crits pour \u00eatre citables. Appuie-toi sur les extraits r\u00e9els fournis. Chaque version fait 60 mots maximum, donne la r\u00e9ponse d\u00e8s la premi\u00e8re phrase, contient au moins un fait chiffr\u00e9, nomme explicitement l'entit\u00e9 concern\u00e9e et n'emploie aucun mot de renvoi du type celui-ci, cette m\u00e9thode ou comme vu plus haut. Le champ faiblesse indique en une phrase ce qui rendait le passage d'origine non citable.",
+    "- recos : exactement 6 actions d\u00e9duites des crit\u00e8res mesur\u00e9s les plus faibles. Les quatre premi\u00e8res corrigent les crit\u00e8res techniques et \u00e9ditoriaux mesur\u00e9s. Les deux derni\u00e8res portent sur la r\u00e9duction de la d\u00e9pendance aux plateformes, \u00e0 partir des mesures d'ind\u00e9pendance qui te sont fournies : capture d'adresses, espace compte, offre d'abonnement, notification directe. Formule-les en langage de responsable marketing ou produit, jamais en jargon SEO.",
+    "- reecritures : exactement 3 passages reformul\u00e9s \u00e0 partir des extraits fournis. INTERDICTION ABSOLUE D'INVENTER UN FAIT. Tu n'ajoutes aucun chiffre, aucune date, aucun nom, aucune quantit\u00e9 qui ne figure pas d\u00e9j\u00e0 mot pour mot dans les extraits. Tu ne fais que r\u00e9organiser l'information existante : mettre la r\u00e9ponse en premi\u00e8re phrase, remplacer les mots de renvoi par le nom explicite de l'entit\u00e9, supprimer ce qui d\u00e9pend du contexte. Si un extrait ne contient aucune donn\u00e9e chiffr\u00e9e, tu n'en inventes pas : tu produis une reformulation sans chiffre et tu l'indiques dans le champ faiblesse. Attribuer au m\u00e9dia une statistique qu'il n'a pas publi\u00e9e est une faute grave. Chaque version fait 60 mots maximum. Le champ faiblesse explique en une phrase ce qui rendait le passage d'origine non citable.",
   ].join("\n");
 
   // --- Mesures reelles : robots.txt et pages du site, en parallele ---
@@ -872,6 +1145,8 @@ exports.handler = async function (event) {
   // Scores calcules par le code, jamais par le modele
   const calcAIO = site.dispo ? scoreAIO(site) : null;
   const calcLLM = site.dispo ? scoreLLM(site, robots) : null;
+  const calcPresse = site.dispo ? scorePresse(site) : null;
+  const calcIndep = (site.dispo && site.audience) ? scoreIndependance(site.audience) : null;
   const malus = site.dispo ? calculMalus(site, robots) : { total: 0, liste: [] };
 
   if (calcAIO) {
@@ -885,6 +1160,10 @@ exports.handler = async function (event) {
   const tous = [];
   if (calcAIO) calcAIO.detail.forEach(function (d) {
     tous.push({ nom: d.critere, perimetre: "Google AI Overview", etat: etatCritere(d.obtenu, d.max),
+                constat: d.constat, obtenu: d.obtenu, max: d.max });
+  });
+  if (calcPresse) calcPresse.detail.forEach(function (d) {
+    tous.push({ nom: d.critere, perimetre: "Autorite editoriale", etat: etatCritere(d.obtenu, d.max),
                 constat: d.constat, obtenu: d.obtenu, max: d.max });
   });
   if (calcLLM) calcLLM.detail.forEach(function (d) {
@@ -919,6 +1198,12 @@ exports.handler = async function (event) {
       site.extraits.map(function (e, i) { return "Article " + (i + 1) + " : " + e; }).join(" ")
     : "";
 
+  const indepBrief = calcIndep
+    ? "MESURES D'INDEPENDANCE (ce que le media possede en propre, verifie sur son site) : " +
+      calcIndep.detail.map(function (x) { return x.critere + " : " + x.constat; }).join(" ; ") +
+      ". Score d'independance : " + calcIndep.score + " sur 100. "
+    : "";
+
   const scoresBrief = calcAIO
     ? "SCORES CALCULES, a reprendre tels quels : Google AI Overview " + calcAIO.score + " sur 100, " +
       "Assistants IA " + calcLLM.score + " sur 100. "
@@ -930,6 +1215,7 @@ exports.handler = async function (event) {
     scoresBrief +
     (criteres.length ? ("CRITERES MESURES, dans l'ordre, a expliquer un par un : " + listeCriteres + " ") : "") +
     robotsBrief + " " +
+    indepBrief +
     extraits +
     " Redige uniquement les explications et les recommandations demandees, en francais accentue.";
 
@@ -1000,7 +1286,9 @@ exports.handler = async function (event) {
     }
 
     const brut = JSON.parse(text.slice(start, end + 1));
-    const resultat = assembler(brut, calcAIO, calcLLM, criteres, robots, site, hostFinal, redirige, mode);
+    let resultat = assembler(brut, calcAIO, calcLLM, calcPresse, calcIndep, criteres, robots, site, hostFinal, redirige, mode);
+    // Verification mecanique : aucune statistique inventee ne doit sortir d'ici.
+    resultat = controler(resultat, site.dispo ? site.extraits : []);
 
     // La note d'acces des robots reste factuelle, elle n'est pas redigee par le modele.
     if (resultat.llm) {
