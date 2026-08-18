@@ -88,6 +88,23 @@
   .calc-constat{ flex:1; min-width:130px; color:var(--muted); font-size:13px; }
   .calc-pts{ flex:none; font-weight:700; font-size:13.5px; width:64px; text-align:right; }
   .calc-pts.plein{ color:#1B7F3B; } .calc-pts.partiel{ color:#9A6200; } .calc-pts.vide{ color:#B0202A; }
+  .malus{ margin-top:14px; padding-top:14px; border-top:1.5px solid var(--ink); }
+  .malus-t{ font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+  .malus-row{ display:flex; align-items:baseline; gap:12px; padding:8px 0; font-size:14px;
+    border-bottom:1px solid var(--line); }
+  .malus-row:last-of-type{ border-bottom:none; }
+  .malus-lib{ flex:1; min-width:0; font-weight:600; }
+  .malus-pv{ flex:none; width:170px; color:var(--muted); font-size:12.5px; }
+  .malus-pt{ flex:none; width:52px; text-align:right; font-weight:700; color:#B0202A; font-size:13.5px; }
+  .malus-tot{ margin-top:10px; display:flex; justify-content:space-between; font-size:14px; font-weight:700; }
+
+  .reec{ padding:16px 0; border-bottom:1px solid var(--line); }
+  .reec:first-child{ margin-top:14px; border-top:1px solid var(--line); }
+  .reec:last-child{ border-bottom:none; }
+  .reec-f{ font-size:13px; color:var(--muted); }
+  .reec-v{ margin-top:9px; border-left:3px solid var(--accent); background:var(--soft);
+    padding:13px 17px; font-size:14.5px; line-height:1.6; }
+
   .calc-note{ margin-top:14px; font-size:12.5px; color:var(--muted); }
 
   .nonmes-plus{ margin-top:8px; font-size:13.5px; color:var(--muted); }
@@ -134,6 +151,7 @@
   .mode.ancre{ border-color:var(--accent); color:var(--accent); font-weight:600; }
 
   .alerte{ margin-top:20px; border:1.5px solid var(--accent); background:var(--tint); padding:18px 22px; }
+  .alerte.douce{ border-color:var(--line); background:var(--soft); }
   .alerte-titre{ font-size:16px; font-weight:800; letter-spacing:-.01em; }
   .alerte-txt{ margin-top:7px; font-size:14px; line-height:1.55; }
 
@@ -159,12 +177,12 @@
   .measured{ font-size:11.5px; font-weight:600; padding:3px 9px;
     border:1px solid var(--accent); color:var(--accent); }
   .robots-intro{ margin-top:9px; font-size:14px; color:#3A3A3A; }
-  .bot{ display:flex; align-items:baseline; gap:12px; padding:9px 0;
+  .bot{ display:flex; align-items:baseline; gap:16px; padding:10px 0;
     border-bottom:1px solid var(--line); font-size:14px; }
   .bot:first-of-type{ border-top:1px solid var(--line); margin-top:14px; }
-  .bot-name{ flex:none; width:170px; font-weight:600; }
-  .bot-org{ flex:1; min-width:110px; color:var(--muted); font-size:13px; }
-  .bot-state{ flex:none; font-weight:700; font-size:13px; }
+  .bot-name{ flex:1; min-width:0; font-weight:600; }
+  .bot-org{ flex:none; width:160px; color:var(--muted); font-size:13px; }
+  .bot-state{ flex:none; width:84px; text-align:right; font-weight:700; font-size:13px; }
   .bot-state.bloque{ color:#B0202A; }
   .bot-state.partiel{ color:#9A6200; }
   .bot-state.autorise{ color:#1B7F3B; }
@@ -174,6 +192,18 @@
   .signature{ margin-top:20px; font-size:14px; color:var(--muted); max-width:540px; }
   .bridge{ margin-top:20px; font-size:15px; font-weight:600; }
   .scorecap{ margin-top:6px; font-size:13px; color:var(--muted); max-width:170px; line-height:1.35; }
+
+  .sousbloc{ margin-top:20px; border:1.5px solid var(--line); padding:20px 22px; }
+  .sousbloc-t{ font-size:15px; font-weight:700; display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
+  .sousbloc-n{ margin-top:8px; font-size:13.5px; color:var(--muted); }
+  .rq{ display:flex; gap:14px; align-items:baseline; padding:11px 0;
+    border-bottom:1px solid var(--line); font-size:14.5px; }
+  .rq:first-child{ margin-top:12px; border-top:1px solid var(--line); }
+  .rq:last-child{ border-bottom:none; }
+  .rq .n{ color:var(--accent); font-weight:800; flex:none; width:26px; }
+  .passage{ margin-top:14px; border-left:3px solid var(--accent); background:var(--soft);
+    padding:16px 20px; font-size:14.5px; line-height:1.65; font-style:italic; }
+  .passage-ko{ margin-top:14px; font-size:14px; color:var(--muted); line-height:1.55; }
 
   .item{ border-top:1px solid var(--line); padding:18px 0; display:flex; gap:14px; align-items:flex-start; }
   .item:last-child{ border-bottom:1px solid var(--line); }
@@ -215,7 +245,7 @@
     .sig-line{ display:block; } .sig-line b{ width:auto; display:block; margin-bottom:3px; }
     .llm-line b{ width:auto; } .llm-why{ margin-left:0; }
     .calc-row{ flex-wrap:wrap; } .calc-crit{ width:auto; }
-    .bot{ flex-wrap:wrap; } .bot-name{ width:auto; }
+    .bot-org{ width:auto; } .bot-state{ width:auto; }
   }
   @media (prefers-reduced-motion: reduce){ .load .bar i{ animation:none; width:100%; } }
 </style>
@@ -310,7 +340,7 @@
         <div class="card-kicker">En dehors de Google</div>
         <div class="card-title">Assistants IA</div>
         <div class="card-score"><span id="r-llm-score"></span><span class="den"> / 100</span></div>
-        <div class="card-cap">des crit&egrave;res mesur&eacute;s sont couverts, hors mentions externes</div>
+        <div class="card-cap">de l'accessibilit&eacute; technique aux assistants</div>
         <div class="card-note" id="r-llm-enjeu"></div>
       </div>
     </div>
@@ -376,12 +406,21 @@
         <div id="r-passage"></div>
       </div>
 
-      <h2>Assistants IA : &ecirc;tes-vous cit&eacute; dans leurs r&eacute;ponses ?</h2>
+      <div class="sousbloc" id="r-reec-bloc">
+        <div class="sousbloc-t">Trois passages r&eacute;&eacute;crits pour &ecirc;tre citables</div>
+        <p class="sousbloc-n">Reprenez-les tels quels : r&eacute;ponse en premi&egrave;re phrase, un fait chiffr&eacute;,
+          entit&eacute; nomm&eacute;e, aucun mot de renvoi.</p>
+        <div id="r-reec"></div>
+      </div>
+
+      <h2>Assistants IA : votre site leur est-il accessible ?</h2>
       <p class="h2note">ChatGPT, Perplexity, Gemini et Claude ne lisent pas l'index Google. Ils d&eacute;pendent
-        de leurs propres robots et surtout des mentions de votre marque ailleurs sur le web. L'enjeu n'est
-        plus le trafic, mais la pr&eacute;sence de votre marque.</p>
+        de leurs propres robots et des mentions de votre marque ailleurs sur le web. Ce score mesure
+        uniquement ce qui est v&eacute;rifiable automatiquement, &agrave; savoir l'acc&egrave;s de leurs robots et la
+        lisibilit&eacute; de vos pages. <strong>Votre pr&eacute;sence r&eacute;elle dans leurs r&eacute;ponses n'est pas mesur&eacute;e
+        ici</strong> : elle se construit hors de votre site et demande un suivi d&eacute;di&eacute;.</p>
       <div class="panel-llm">
-        <div class="llm-line"><b>Pr&eacute;sence de marque</b><span id="r-llm-presence"></span></div>
+        <div class="llm-line"><b>Accessibilit&eacute; mesur&eacute;e</b><span id="r-llm-presence"></span></div>
         <div class="llm-why" id="r-llm-why"></div>
         <div class="llm-sep"></div>
         <div class="llm-line"><b>Acc&egrave;s des robots IA</b><span id="r-acces-etat"></span></div>
@@ -408,17 +447,21 @@
       </div>
 
       <h2>Le d&eacute;tail du calcul</h2>
-      <p class="h2note">Chaque score est la somme de points attribu&eacute;s selon une grille fixe. Deux analyses
-        du m&ecirc;me site donnent le m&ecirc;me r&eacute;sultat.</p>
+      <p class="h2note">Chaque score est la somme de points attribu&eacute;s selon une grille fixe : aucune
+        appr&eacute;ciation subjective n'intervient. L'analyse porte sur un &eacute;chantillon de pages de votre site,
+        le r&eacute;sultat peut donc varier l&eacute;g&egrave;rement d'un passage &agrave; l'autre.</p>
       <div class="calc" id="r-calc-aio">
         <div class="calc-head">Google AI Overview <span id="r-calc-aio-total"></span></div>
         <div id="r-calc-aio-list"></div>
+        <div id="r-malus"></div>
       </div>
       <div class="calc" id="r-calc-llm">
         <div class="calc-head">Assistants IA <span id="r-calc-llm-total"></span></div>
         <div id="r-calc-llm-list"></div>
-        <p class="calc-note">Les mentions de votre marque hors de votre site ne sont pas mesurables
-          automatiquement, elles ne sont donc pas compt&eacute;es ici.</p>
+        <p class="calc-note">Ce score porte sur l'accessibilit&eacute; et la lisibilit&eacute; de vos pages. Les
+          mentions de votre marque ailleurs sur le web, qui d&eacute;terminent en grande partie votre pr&eacute;sence
+          r&eacute;elle dans les assistants, ne sont pas mesurables automatiquement et ne sont donc pas
+          compt&eacute;es ici.</p>
       </div>
 
       <h2>Les points &agrave; corriger en priorit&eacute;</h2>
@@ -473,9 +516,13 @@
   var ROBOTS_OK_0 = "Aucun des {n} robots IA courants n'est bloqu\u00e9 sur votre site.";
   var ROBOTS_OK_N = "{b} robots IA sur {n} sont bloqu\u00e9s sur votre site.";
   var ROBOTS_KO = "Votre fichier robots.txt n'a pas pu \u00eatre lu.";
+  var MALUS_T = "Points retir\u00e9s : blocages d'extraction";
+  var MALUS_B = "Sous-total avant blocages : {b} / 100";
   var PASSAGE_KO = "Aucun passage clairement extractible n'a \u00e9t\u00e9 rep\u00e9r\u00e9 sur vos pages. Les paragraphes sont soit trop longs, soit trop d\u00e9pendants de leur contexte pour \u00eatre repris tels quels.";
-  var ALERTE_T = "{b} robots IA sur {n} sont bloqu\u00e9s sur votre site";
-  var ALERTE_X = "Sont concern\u00e9s : {l}. Un robot bloqu\u00e9 ne peut citer aucun de vos contenus. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'\u00eatre technique.";
+  var ALERTE_T = "{b} robot(s) de r\u00e9cup\u00e9ration bloqu\u00e9(s) sur {n}";
+  var ALERTE_X = "Sont concern\u00e9s : {l}. Ces robots conditionnent directement la citation de vos pages par ChatGPT, Perplexity ou Copilot. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'\u00eatre technique.";
+  var ALERTE_T2 = "{b} robot(s) d'entra\u00eenement bloqu\u00e9(s) sur {n}";
+  var ALERTE_X2 = "Sont concern\u00e9s : {l}. Ces robots alimentent l'entra\u00eenement des mod\u00e8les. Les bloquer n'emp\u00eache pas Google d'afficher un AI Overview \u00e0 partir de vos pages, qui repose sur l'index de recherche classique.";
   var RAISONS = {
     "page d'accueil illisible": "Votre site a refus\u00e9 notre requ\u00eate de lecture, ce qui arrive avec certaines protections anti-robots.",
     "aucun article accessible": "Nous avons atteint votre site mais n'avons pas pu identifier de page \u00e0 analyser depuis l'accueil.",
@@ -489,7 +536,7 @@
   var MODE_LU = "Scores calcul\u00e9s sur {n} page(s) lue(s) sur votre site";
   var MODE_NONLU = "Pages non lisibles, aucun score calcul\u00e9";
   var ERR_DOMAINE = "Indiquez le domaine complet avec son extension, par exemple economist.com";
-  var PRESENCE = { forte:"Forte", partielle:"Partielle", faible:"Faible" };
+  var PRESENCE = { forte:"Bonne", partielle:"Partielle", faible:"Faible" };
   var ACCES = { ouvert:"Ouvert", partiel:"Partiel", restreint:"Restreint", indetermine:"Ind\u00e9termin\u00e9" };
   var MOT_MOYEN = "\u00c0 renforcer";
   var MOT_AFAIRE = "\u00c0 faire";
@@ -629,6 +676,20 @@
         el("r-autres-bloc").classList.add("hidden");
       }
 
+      // reecritures citables
+      var reec = data.reecritures || [];
+      if(reec.length){
+        var hr = "";
+        reec.forEach(function(r){
+          hr += '<div class="reec"><div class="reec-f">'+esc(r.faiblesse)+'</div>'
+              + '<div class="reec-v">'+esc(r.version)+'</div></div>';
+        });
+        el("r-reec").innerHTML = hr;
+        el("r-reec-bloc").classList.remove("hidden");
+      } else {
+        el("r-reec-bloc").classList.add("hidden");
+      }
+
       // passage extractible reellement trouve sur le site
       el("r-passage").innerHTML = aio.passage
         ? '<div class="passage">'+esc(aio.passage)+'</div>'
@@ -645,6 +706,7 @@
       el("r-acces-note").textContent = (llm.acces && llm.acces.note) || "";
 
       renderCalc("r-calc-aio", aio);
+      renderMalus(aio);
       renderCalc("r-calc-llm", llm);
     }
 
@@ -682,6 +744,20 @@
     el("unlock-btn").disabled = true; hide("gate-error");
   }
 
+  function renderMalus(bloc){
+    var z = el("r-malus");
+    if(!bloc.malus || !bloc.malus.liste || !bloc.malus.liste.length){ z.innerHTML = ""; return; }
+    var h = '<div class="malus"><div class="malus-t">' + MALUS_T + '</div>';
+    bloc.malus.liste.forEach(function(x){
+      h += '<div class="malus-row"><span class="malus-lib">'+esc(x.libelle)+'</span>'
+         + '<span class="malus-pv">'+esc(x.preuve)+'</span>'
+         + '<span class="malus-pt">- '+x.points+'</span></div>';
+    });
+    h += '<div class="malus-tot"><span>'+MALUS_B.replace("{b}", bloc.brut)+'</span>'
+       + '<span>- '+bloc.malus.total+' &rarr; '+bloc.score+' / 100</span></div></div>';
+    z.innerHTML = h;
+  }
+
   function renderCalc(prefixe, bloc){
     el(prefixe + "-total").textContent = bloc.score + " / 100";
     var html = "";
@@ -698,12 +774,20 @@
 
   function renderAlerte(rb){
     var a = el("r-alerte");
-    if(rb && rb.dispo && rb.nbBloques > 0){
-      el("r-alerte-titre").textContent = ALERTE_T.replace("{b}", rb.nbBloques).replace("{n}", rb.nbTotal);
-      el("r-alerte-txt").textContent = ALERTE_X.replace("{l}", (rb.listeBloques||[]).join(", "));
-      a.classList.remove("hidden");
+    if(!rb || !rb.dispo){ a.classList.add("hidden"); return; }
+
+    // Priorite aux robots de recuperation : eux seuls conditionnent la citation.
+    if(rb.recupBloques > 0){
+      a.className = "alerte";
+      el("r-alerte-titre").textContent = ALERTE_T.replace("{b}", rb.recupBloques).replace("{n}", rb.recupTotal);
+      el("r-alerte-txt").textContent = ALERTE_X.replace("{l}", (rb.recupListeBloques||[]).join(", "));
+    } else if(rb.entrainBloques > 0){
+      a.className = "alerte douce";
+      el("r-alerte-titre").textContent = ALERTE_T2.replace("{b}", rb.entrainBloques).replace("{n}", rb.entrainTotal);
+      el("r-alerte-txt").textContent = ALERTE_X2.replace("{l}", (rb.entrainListeBloques||[]).join(", "));
     } else {
       a.classList.add("hidden");
+      return;
     }
   }
 
@@ -726,13 +810,12 @@
     lignes.forEach(function(l){
       var etat = l[1] === "present" ? "autorise" : (l[1] === "partiel" ? "partiel" : "bloque");
       html += '<div class="bot"><span class="bot-name">'+esc(l[0])+'</span>'
-            + '<span class="bot-org"></span>'
             + '<span class="bot-state '+etat+'">'+ETAT_MESURE[l[1]]+'</span></div>';
     });
     html += '<div class="bot"><span class="bot-name">'+LB_LONGUEUR+'</span>'
-          + '<span class="bot-org"></span><span class="bot-state">'+st.motsMoyen+' '+MOTS+'</span></div>';
+          + '<span class="bot-state">'+st.motsMoyen+' '+MOTS+'</span></div>';
     html += '<div class="bot"><span class="bot-name">'+LB_CHIFFRES+'</span>'
-          + '<span class="bot-org"></span><span class="bot-state">'+st.chiffresMoyen+'</span></div>';
+          + '<span class="bot-state">'+st.chiffresMoyen+'</span></div>';
     liste.innerHTML = html;
   }
 
@@ -781,9 +864,14 @@
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           email: el("email").value.trim(),
-          url: el("url").value.trim(),
-          site: data ? data.site : "",
-          score: data ? data.score : "",
+          url: (data && data.hostFinal) ? data.hostFinal : el("url").value.trim(),
+          site: data ? (data.site || "") : "",
+          theme: el("theme").value || "",
+          scoreAio: (data && data.aio) ? data.aio.score : "",
+          scoreLlm: (data && data.llm) ? data.llm.score : "",
+          pagesLues: (data && data.site_ && data.site_.nbPages) ? data.site_.nbPages : 0,
+          robotsBloques: (data && data.robots && data.robots.dispo) ? data.robots.nbBloques : "",
+          robotsTotal: (data && data.robots && data.robots.dispo) ? data.robots.nbTotal : "",
           consent: el("consent").checked
         })
       });
