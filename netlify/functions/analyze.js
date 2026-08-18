@@ -44,6 +44,17 @@ const SCHEMA = {
         required: ["enjeu", "action"],
       },
     },
+    reecritures: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          faiblesse: { type: "STRING" },
+          version: { type: "STRING" },
+        },
+        required: ["faiblesse", "version"],
+      },
+    },
     recos: {
       type: "ARRAY",
       items: {
@@ -60,7 +71,7 @@ const SCHEMA = {
       },
     },
   },
-  required: ["site", "verdict", "aio", "llm", "explications", "recos"],
+  required: ["site", "verdict", "aio", "llm", "explications", "reecritures", "recos"],
 };
 
 // --------- Assemblage : mesures calculees + redaction du modele ---------
@@ -90,6 +101,8 @@ function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, red
     mesurable: !!calcAIO,
     aio: calcAIO ? {
       score: calcAIO.score,
+      brut: calcAIO.brut,
+      malus: calcAIO.malus,
       detail: calcAIO.detail,
       enjeu: aio.enjeu || "",
       requete: aio.requete || "",
@@ -111,6 +124,7 @@ function assembler(txt, calcAIO, calcLLM, criteres, robots, site, hostFinal, red
     } : null,
     signaux: signaux,
     recos: Array.isArray(d.recos) ? d.recos : [],
+    reecritures: Array.isArray(d.reecritures) ? d.reecritures.slice(0, 3) : [],
     robots: robots,
     site_: site,
     hostFinal: hostFinal,
@@ -183,24 +197,36 @@ function scoreAIO(m) {
 function scoreLLM(m, robots) {
   const d = [];
 
-  let ptsAcces = 0, constatAcces;
+  // Les robots de recuperation conditionnent la citation, ceux d'entrainement
+  // alimentent les modeles sans effet direct. La ponderation le reflete.
+  let ptsRecup = 0, constatRecup, ptsEntrain = 0, constatEntrain;
   if (robots && robots.dispo) {
-    const ouverts = robots.nbTotal - robots.nbBloques;
-    ptsAcces = Math.round((ouverts / robots.nbTotal) * 40);
-    constatAcces = ouverts + " robot(s) IA sur " + robots.nbTotal + " ont acc\u00e8s au site";
+    const ouvertsR = robots.recupTotal - robots.recupBloques;
+    ptsRecup = Math.round((ouvertsR / robots.recupTotal) * 28);
+    constatRecup = ouvertsR + " / " + robots.recupTotal + " robots de r\u00e9cup\u00e9ration ont acc\u00e8s";
+    const ouvertsE = robots.entrainTotal - robots.entrainBloques;
+    ptsEntrain = Math.round((ouvertsE / robots.entrainTotal) * 12);
+    constatEntrain = ouvertsE + " / " + robots.entrainTotal + " robots d'entra\u00eenement ont acc\u00e8s";
   } else {
-    constatAcces = "Fichier robots.txt non lisible, acc\u00e8s non v\u00e9rifiable";
+    constatRecup = "Fichier robots.txt non lisible";
+    constatEntrain = "Fichier robots.txt non lisible";
   }
-  d.push({ critere: "Acc\u00e8s des robots IA", obtenu: ptsAcces, max: 40, constat: constatAcces });
+  d.push({ critere: "Acc\u00e8s des robots de r\u00e9cup\u00e9ration", obtenu: ptsRecup, max: 28, constat: constatRecup });
+  d.push({ critere: "Acc\u00e8s des robots d'entra\u00eenement", obtenu: ptsEntrain, max: 12, constat: constatEntrain });
 
-  d.push({ critere: "Auteur d\u00e9clar\u00e9 dans les donn\u00e9es structur\u00e9es", obtenu: etatVers(m.auteurBalise, 20, 10), max: 20,
-           constat: m.auteurBalise === "present" ? "Auteur identifiable par les machines" : "Auteur non identifiable par les machines" });
-  d.push({ critere: "Balisage Article ou NewsArticle", obtenu: etatVers(m.balisageArticle, 15, 8), max: 15,
+  d.push({ critere: "Auteur d\u00e9clar\u00e9 dans les donn\u00e9es structur\u00e9es", obtenu: etatVers(m.auteurBalise, 15, 8), max: 15,
+           constat: m.auteurBalise === "present" ? "Auteur d\u00e9clar\u00e9 comme entit\u00e9"
+                  : (m.auteurTexteSeul ? "Auteur d\u00e9clar\u00e9 en texte simple, non reli\u00e9 \u00e0 une entit\u00e9" : "Champ auteur absent") });
+  d.push({ critere: "Balisage Article ou NewsArticle", obtenu: etatVers(m.balisageArticle, 12, 6), max: 12,
            constat: m.balisageArticle === "present" ? "Contenu identifi\u00e9 comme article" : "Contenu non identifi\u00e9 comme article" });
-  d.push({ critere: "Date de mise \u00e0 jour d\u00e9clar\u00e9e", obtenu: etatVers(m.dateMaj, 10, 5), max: 10,
+  d.push({ critere: "Date de mise \u00e0 jour d\u00e9clar\u00e9e", obtenu: etatVers(m.dateMaj, 8, 4), max: 8,
            constat: m.dateMaj === "present" ? "Actualisation explicite" : "Actualisation non d\u00e9clar\u00e9e" });
   d.push({ critere: "Longueur des pages", obtenu: pts(m.motsMoyen, [[1200,15],[600,11],[300,6]]), max: 15,
            constat: m.motsMoyen + " mots en moyenne" });
+  d.push({ critere: "Liage d'entit\u00e9 (sameAs)", obtenu: etatVers(m.liageEntite, 5, 3), max: 5,
+           constat: m.liageEntite === "present" ? "Liens d'entit\u00e9 pr\u00e9sents" : "Aucun lien d'entit\u00e9 d\u00e9clar\u00e9" });
+  d.push({ critere: "Fichier llms.txt", obtenu: (m.llmsTxt ? 5 : 0), max: 5,
+           constat: m.llmsTxt ? "Pr\u00e9sent \u00e0 la racine du site" : "Absent" });
 
   const total = d.reduce(function (a, x) { return a + x.obtenu; }, 0);
   return { score: total, detail: d };
@@ -252,7 +278,11 @@ async function getHTML(u, ms) {
     const ct = r.headers.get("content-type") || "";
     if (ct && ct.indexOf("html") === -1) return null;
     const txt = await r.text();
-    return { html: txt.slice(0, 400000), urlFinale: r.url || u };
+    return {
+      html: txt.slice(0, 400000),
+      urlFinale: r.url || u,
+      xRobots: r.headers.get("x-robots-tag") || "",
+    };
   } catch (e) {
     clearTimeout(timer);
     return null;
@@ -260,19 +290,48 @@ async function getHTML(u, ms) {
 }
 
 // Retire scripts, styles et balises pour obtenir le texte visible.
+const ENTITES = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  eacute: "\u00e9", egrave: "\u00e8", ecirc: "\u00ea", agrave: "\u00e0", ccedil: "\u00e7",
+  ugrave: "\u00f9", ocirc: "\u00f4", icirc: "\u00ee", iuml: "\u00ef", ntilde: "\u00f1",
+  laquo: "\u00ab", raquo: "\u00bb", hellip: "...", rsquo: "'", lsquo: "'",
+  ldquo: '"', rdquo: '"', ndash: ", ", mdash: ", ", euro: "\u20ac", deg: "\u00b0",
+};
+
+// Decode les entites HTML, nommees comme numeriques.
+// Sans cela, une apostrophe ecrite &#039; s'affichait telle quelle dans le rapport.
+function decodeEntites(t) {
+  return t
+    .replace(/&#(\d+);/g, function (_, n) {
+      const code = parseInt(n, 10);
+      return (code > 0 && code < 1114112) ? String.fromCodePoint(code) : " ";
+    })
+    .replace(/&#x([0-9a-f]+);/gi, function (_, h) {
+      const code = parseInt(h, 16);
+      return (code > 0 && code < 1114112) ? String.fromCodePoint(code) : " ";
+    })
+    .replace(/&([a-z]+);/gi, function (m, nom) {
+      const v = ENTITES[nom.toLowerCase()];
+      return v !== undefined ? v : " ";
+    });
+}
+
 function texteVisible(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&[a-z]+;/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return decodeEntites(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+  ).replace(/\s+/g, " ").trim();
 }
 
 // Cherche des liens d'articles plausibles sur la page d'accueil.
 function trouverArticles(html, origin) {
-  const exclus = /\/(tag|tags|category|categories|rubrique|auteur|author|page|abonnement|abonnez|newsletter|contact|mentions|cgv|cgu|privacy|cookies|login|connexion|compte|recherche|search|rss|feed|sitemap|podcast|video|newsletters)\b/i;
+  // Le mot exclu doit constituer un SEGMENT ENTIER du chemin.
+  // Sans cela, un article intitule "auteur-mystere-revele" etait ecarte a tort.
+  // "rubrique" n'est volontairement pas exclu : sur de nombreux sites de presse
+  // francais, /rubrique/ est le prefixe des articles eux-memes.
+  const exclus = /\/(tag|tags|category|categories|categorie|auteur|auteurs|author|authors|page|abonnement|abonnez|newsletter|newsletters|contact|mentions|cgv|cgu|privacy|cookies|login|connexion|compte|recherche|search|rss|feed|sitemap|plan-du-site)(\/|$|\?)/i;
   const forts = [];   // chemins qui ressemblent nettement a un article
   const faibles = []; // candidats de repli
 
@@ -316,6 +375,8 @@ function analyserPage(html) {
     h1: 0, h2: 0, paragraphes: 0, mots: 0, chiffres: 0,
     listes: 0, tableaux: 0, schemaFAQ: false, titresTotal: 0, titresQuestion: 0,
     parasUtiles: 0, paraMoyen: 0, ouvertureDirecte: false, passage: "", passageNote: 0,
+    schemaAuteurTexte: false, noindex: false, nosnippet: false, maxSnippet: null, paywall: false,
+    h1Unique: false, sautNiveau: false, sameAs: false, breadcrumb: false,
   };
   if (!html) return res;
 
@@ -337,7 +398,9 @@ function analyserPage(html) {
       const types = Array.isArray(t) ? t.join(" ") : String(t || "");
       if (/Article|NewsArticle|BlogPosting|ReportageNewsArticle/i.test(types)) {
         res.schemaArticle = true;
-        if (it.author) res.schemaAuteur = true;
+        // Un auteur declare comme objet est exploitable, une simple chaine l'est moins.
+        if (it.author && typeof it.author === "object") res.schemaAuteur = true;
+        else if (it.author) res.schemaAuteurTexte = true;
         if (it.datePublished) res.schemaDatePub = true;
         if (it.dateModified) res.schemaDateMaj = true;
       }
@@ -353,6 +416,31 @@ function analyserPage(html) {
   res.h1 = (html.match(/<h1[\s>]/gi) || []).length;
   res.h2 = (html.match(/<h2[\s>]/gi) || []).length;
   res.paragraphes = (html.match(/<p[\s>]/gi) || []).length;
+
+  // --- Bloqueurs d'extraction : ils empechent la citation quel que soit le contenu ---
+
+  // Directives robots au niveau de la page
+  const metaRobots = (html.match(/<meta[^>]+name=["']robots["'][^>]*>/gi) || []).join(" ").toLowerCase();
+  res.noindex = /noindex/.test(metaRobots);
+  res.nosnippet = /nosnippet/.test(metaRobots) || /data-nosnippet/i.test(html);
+  const mx = metaRobots.match(/max-snippet\s*:\s*(-?\d+)/);
+  res.maxSnippet = mx ? parseInt(mx[1], 10) : null;   // -1 = illimite, 0 = aucun extrait
+
+  // Paywall declare dans les donnees structurees ou marqueurs courants
+  res.paywall = /"isAccessibleForFree"\s*:\s*(false|"false")/i.test(html)
+             || /class=["'][^"']*(paywall|premium-wall|article-locked|subscription-wall)[^"']*["']/i.test(html);
+
+  // Hierarchie des titres
+  const niveaux = (html.match(/<h([1-6])[\s>]/gi) || []).map(function (t) { return parseInt(t.replace(/\D/g, ""), 10); });
+  res.h1Unique = (html.match(/<h1[\s>]/gi) || []).length === 1;
+  res.sautNiveau = false;
+  for (let i = 1; i < niveaux.length; i++) {
+    if (niveaux[i] - niveaux[i - 1] > 1) { res.sautNiveau = true; break; }
+  }
+
+  // Liage d'entite et navigation
+  res.sameAs = /"sameAs"\s*:/i.test(html);
+  res.breadcrumb = /"@type"\s*:\s*"BreadcrumbList"/i.test(html);
 
   // --- Signaux d'extractibilite : ce qui permet a un AI Overview de reprendre un passage ---
 
@@ -389,17 +477,24 @@ function analyserPage(html) {
     const candidats = paras
       .map(function (t) {
         const mots = t.split(/\s+/).length;
-        let note = 0;
+        const virgules = (t.match(/,/g) || []).length;
+        const points = (t.match(/[.!?]/g) || []).length;
+
+        // Un passage citable est une phrase, pas une enumeration ni une liste de credits.
+        const enumeration = virgules > Math.max(3, mots / 6) && points <= 1;
+        const phrase = /[.!?]["'\u00bb]?\s*$/.test(t.trim());
+        if (!/\d/.test(t) || enumeration || !phrase) return { texte: t, note: 0, mots: mots };
+
+        let note = 2;                                   // contient une donnee
         if (mots >= 25 && mots <= 70) note += 3;
         else if (mots >= 18 && mots <= 90) note += 1;
-        if (/\d/.test(t)) note += 2;
-        if (/\d+\s?(%|euros?|millions?|milliards?)/i.test(t)) note += 1;
-        if (!/^(mais|or|donc|ainsi|pourtant|cependant|il|elle|ils|elles|ce|cette|cela)\b/i.test(t)) note += 1;
+        if (/\d+\s?(%|euros?|millions?|milliards?|ans?)/i.test(t)) note += 1;
+        if (!/^(mais|or|donc|ainsi|pourtant|cependant|il|elle|ils|elles|ce|cette|cela|celui)\b/i.test(t)) note += 1;
         return { texte: t, note: note, mots: mots };
       })
       .sort(function (a, b) { return b.note - a.note; });
 
-    if (candidats.length && candidats[0].note >= 4) {
+    if (candidats.length && candidats[0].note >= 5) {
       res.passage = candidats[0].texte.slice(0, 400);
       res.passageNote = candidats[0].note;
     }
@@ -407,10 +502,19 @@ function analyserPage(html) {
 
   const texte = texteVisible(html);
   res.mots = texte ? texte.split(/\s+/).length : 0;
-  res.chiffres = (texte.match(/\b\d[\d\s.,]*\s*(%|euros?|EUR|\u20ac|millions?|milliards?|ans?)\b/gi) || []).length
-               + (texte.match(/\b\d{1,3}([.,]\d+)?\s?%/g) || []).length;
+  // Une seule expression, pour ne pas compter deux fois un pourcentage.
+  res.chiffres = (texte.match(/\b\d[\d\s.,]*\s*(%|euros?|EUR|\u20ac|millions?|milliards?|ans?|km|kg|heures?|jours?|mois)\b/gi) || []).length;
 
   return res;
+}
+
+// Convertit un comptage en niveau, a la majorite.
+function niveau(compte, total) {
+  if (!total) return "absent";
+  const part = compte / total;
+  if (part >= 0.7) return "present";
+  if (part >= 0.25) return "partiel";
+  return "absent";
 }
 
 async function lireSite(origin) {
@@ -447,13 +551,24 @@ async function lireSite(origin) {
     a.schemaFAQ += m.schemaFAQ ? 1 : 0;
     a.titresTotal += m.titresTotal; a.titresQuestion += m.titresQuestion;
     a.ouvertureDirecte += m.ouvertureDirecte ? 1 : 0;
+    a.noindex += m.noindex ? 1 : 0;
+    a.nosnippet += m.nosnippet ? 1 : 0;
+    a.snippetZero += (m.maxSnippet !== null && m.maxSnippet === 0) ? 1 : 0;
+    a.paywall += m.paywall ? 1 : 0;
+    a.h1Unique += m.h1Unique ? 1 : 0;
+    a.sautNiveau += m.sautNiveau ? 1 : 0;
+    a.sameAs += m.sameAs ? 1 : 0;
+    a.breadcrumb += m.breadcrumb ? 1 : 0;
+    a.auteurTexte += m.schemaAuteurTexte ? 1 : 0;
     if (m.paraMoyen) { a.paraSomme += m.paraMoyen; a.paraCount += 1; }
     if (m.passageNote > a.meilleureNote) { a.meilleureNote = m.passageNote; a.passage = m.passage; }
     return a;
   }, { schemaArticle:0, schemaAuteur:0, schemaDatePub:0, schemaDateMaj:0, auteurVisible:0,
        dateVisible:0, mots:0, chiffres:0, h2:0, paragraphes:0,
        listes:0, tableaux:0, schemaFAQ:0, titresTotal:0, titresQuestion:0,
-       ouvertureDirecte:0, paraSomme:0, paraCount:0, meilleureNote:0, passage:"" });
+       ouvertureDirecte:0, paraSomme:0, paraCount:0, meilleureNote:0, passage:"",
+       noindex:0, nosnippet:0, snippetZero:0, paywall:0, h1Unique:0, sautNiveau:0,
+       sameAs:0, breadcrumb:0, auteurTexte:0 });
 
   return {
     dispo: true,
@@ -461,8 +576,10 @@ async function lireSite(origin) {
     originFinal: originFinal,
     urls: pages.map(function (p) { return p.url; }),
     extraits: pages.map(function (p) { return p.extrait; }),
-    balisageArticle: agg.schemaArticle === n ? "present" : (agg.schemaArticle > 0 ? "partiel" : "absent"),
-    auteurBalise: agg.schemaAuteur === n ? "present" : (agg.schemaAuteur > 0 ? "partiel" : "absent"),
+    // Seuils a la majorite : une seule page atypique parmi les cinq analysees
+    // ne doit pas faire chuter un site correctement configure.
+    balisageArticle: niveau(agg.schemaArticle, n),
+    auteurBalise: niveau(agg.schemaAuteur, n),
     datePubliee: (agg.schemaDatePub > 0 || agg.dateVisible > 0) ? "present" : "absent",
     dateMaj: agg.schemaDateMaj > 0 ? "present" : "absent",
     auteurAffiche: agg.auteurVisible > 0 ? "present" : "absent",
@@ -477,20 +594,60 @@ async function lireSite(origin) {
     paraMoyen: agg.paraCount ? Math.round(agg.paraSomme / agg.paraCount) : 0,
     ouverturesDirectes: agg.ouvertureDirecte,
     passage: agg.passage || "",
+
+    // Bloqueurs et hygiene technique
+    noindex: agg.noindex > 0,
+    nosnippet: agg.nosnippet > 0 || agg.snippetZero > 0,
+    paywall: agg.paywall > 0,
+    partPaywall: Math.round((agg.paywall / n) * 100),
+    hierarchieTitres: (agg.h1Unique >= n * 0.7 && agg.sautNiveau <= n * 0.3) ? "present"
+                      : (agg.h1Unique > 0 ? "partiel" : "absent"),
+    liageEntite: niveau(agg.sameAs, n),
+    filAriane: niveau(agg.breadcrumb, n),
+    auteurTexteSeul: agg.auteurTexte > 0,
   };
+}
+
+
+// --------- Malus : les blocages qui annulent la citation ---------
+// Contrairement aux criteres positifs, ces elements empechent l'extraction
+// quel que soit la qualite du contenu. Plafonnes a 25 points.
+function calculMalus(m, robots) {
+  const liste = [];
+  if (m.nosnippet) liste.push({ libelle: "Extraction interdite (nosnippet ou max-snippet:0)", points: 15, preuve: "directive presente dans les pages analysees" });
+  if (m.noindex) liste.push({ libelle: "Pages en noindex", points: 10, preuve: "directive noindex detectee" });
+  if (m.paywall) liste.push({ libelle: "Contenu derriere un paywall", points: 8, preuve: m.partPaywall + "% des pages analysees" });
+  if (m.datePubliee === "absent" && m.dateMaj === "absent")
+    liste.push({ libelle: "Aucune date de publication ni de mise a jour", points: 4, preuve: "aucune date exploitable" });
+  if (m.balisageArticle === "absent" && m.auteurAffiche === "absent")
+    liste.push({ libelle: "Aucun auteur ni balisage identifiable", points: 4, preuve: "ni balisage Article ni signature" });
+  if (robots && robots.dispo && robots.recupBloques >= robots.recupTotal - 1)
+    liste.push({ libelle: "Robots de recuperation bloques", points: 8,
+                 preuve: robots.recupBloques + " / " + robots.recupTotal + " robots de recuperation bloques" });
+
+  let total = liste.reduce(function (a, x) { return a + x.points; }, 0);
+  if (total > 25) total = 25;
+  return { total: total, liste: liste };
 }
 
 // --------- Lecture reelle du robots.txt ---------
 // Les robots IA les plus courants. Libelle = ce qui s'affiche a l'ecran.
+// usage "recuperation" : ces robots conditionnent directement la citation.
+// usage "entrainement" : ils alimentent les modeles, sans effet direct sur la citation.
+// Distinction importante : bloquer Google-Extended n'empeche pas l'AI Overview,
+// qui s'appuie sur l'index Google classique.
 const AI_BOTS = [
-  { ua: "GPTBot",             label: "GPTBot",             org: "OpenAI (entrainement)" },
-  { ua: "OAI-SearchBot",      label: "OAI-SearchBot",      org: "OpenAI (recherche)" },
-  { ua: "ChatGPT-User",       label: "ChatGPT-User",       org: "ChatGPT (navigation)" },
-  { ua: "Google-Extended",    label: "Google-Extended",    org: "Google Gemini" },
-  { ua: "PerplexityBot",      label: "PerplexityBot",      org: "Perplexity" },
-  { ua: "ClaudeBot",          label: "ClaudeBot",          org: "Anthropic" },
-  { ua: "CCBot",              label: "CCBot",              org: "Common Crawl" },
-  { ua: "Applebot-Extended",  label: "Applebot-Extended",  org: "Apple Intelligence" },
+  { ua: "OAI-SearchBot",     label: "OAI-SearchBot",     org: "OpenAI, recherche",        usage: "recuperation" },
+  { ua: "ChatGPT-User",      label: "ChatGPT-User",      org: "ChatGPT, navigation",      usage: "recuperation" },
+  { ua: "PerplexityBot",     label: "PerplexityBot",     org: "Perplexity, index",        usage: "recuperation" },
+  { ua: "Perplexity-User",   label: "Perplexity-User",   org: "Perplexity, navigation",   usage: "recuperation" },
+  { ua: "Claude-SearchBot",  label: "Claude-SearchBot",  org: "Anthropic, recherche",     usage: "recuperation" },
+  { ua: "Bingbot",           label: "Bingbot",           org: "Bing, alimente Copilot",   usage: "recuperation" },
+  { ua: "GPTBot",            label: "GPTBot",            org: "OpenAI, entrainement",     usage: "entrainement" },
+  { ua: "ClaudeBot",         label: "ClaudeBot",         org: "Anthropic, entrainement",  usage: "entrainement" },
+  { ua: "Google-Extended",   label: "Google-Extended",   org: "Gemini, entrainement",     usage: "entrainement" },
+  { ua: "CCBot",             label: "CCBot",             org: "Common Crawl",             usage: "entrainement" },
+  { ua: "Applebot-Extended", label: "Applebot-Extended", org: "Apple, entrainement",      usage: "entrainement" },
 ];
 
 function parseRobots(txt) {
@@ -558,14 +715,18 @@ async function readRobots(siteUrl) {
     const groups = parseRobots(txt);
     const bots = AI_BOTS.map(function (b) {
       const st = botStatus(groups, b.ua);
-      return { nom: b.label, org: b.org, etat: st.etat, source: st.source };
+      return { nom: b.label, org: b.org, usage: b.usage, etat: st.etat, source: st.source };
     });
     const bloques = bots.filter(function (b) { return b.etat === "bloque"; });
-    const partiels = bots.filter(function (b) { return b.etat === "partiel"; });
+
+    const recup = bots.filter(function (b) { return b.usage === "recuperation"; });
+    const entrain = bots.filter(function (b) { return b.usage === "entrainement"; });
+    const recupBloques = recup.filter(function (b) { return b.etat === "bloque"; });
+    const entrainBloques = entrain.filter(function (b) { return b.etat === "bloque"; });
 
     let etat;
-    if (bloques.length === 0 && partiels.length === 0) etat = "ouvert";
-    else if (bloques.length >= bots.length - 1) etat = "restreint";
+    if (recupBloques.length === 0) etat = bloques.length === 0 ? "ouvert" : "partiel";
+    else if (recupBloques.length >= recup.length - 1) etat = "restreint";
     else etat = "partiel";
 
     return {
@@ -575,6 +736,13 @@ async function readRobots(siteUrl) {
       nbBloques: bloques.length,
       nbTotal: bots.length,
       listeBloques: bloques.map(function (b) { return b.nom; }),
+      // Ventilation par usage : seuls les robots de recuperation conditionnent la citation.
+      recupTotal: recup.length,
+      recupBloques: recupBloques.length,
+      recupListeBloques: recupBloques.map(function (b) { return b.nom; }),
+      entrainTotal: entrain.length,
+      entrainBloques: entrainBloques.length,
+      entrainListeBloques: entrainBloques.map(function (b) { return b.nom; }),
     };
   } catch (e) {
     clearTimeout(timer);
@@ -661,12 +829,19 @@ exports.handler = async function (event) {
     "- aio.autresRequetes : trois autres questions sans marque, sur lesquelles ce site se joue sa visibilit\u00e9. Varie les intentions : une question pratique, une question de comparaison, une question d'actualit\u00e9 ou de contexte. Appuie-toi sur les extraits fournis.",
     "- aio.citationRaison : une phrase expliquant si les pages du site seraient retenues comme SOURCE de cette r\u00e9ponse. \u00catre mentionn\u00e9 dans un texte et \u00eatre cit\u00e9 comme source sont deux choses diff\u00e9rentes : tu ne parles que de la seconde.",
     "- llm.raison : une phrase appuy\u00e9e sur les mesures fournies.",
+    "- IMPORTANT pour aio.requete et aio.autresRequetes : ce sont des phrases en fran\u00e7ais, pas des saisies clavier. Elles doivent porter tous leurs accents (\u00e9, \u00e8, \u00e0, \u00ea, \u00e7), commencer par une majuscule et se terminer par un point d'interrogation. Une requ\u00eate sans accents est une r\u00e9ponse invalide.",
     "- explications : exactement autant d'entr\u00e9es que de crit\u00e8res fournis, dans le M\u00caME ORDRE. Pour chacune, pourquoi ce crit\u00e8re compte pour la citation (une phrase) et l'action \u00e0 mener (une phrase op\u00e9rationnelle).",
     "- recos : exactement 6 actions, de la plus prioritaire \u00e0 la moins prioritaire, d\u00e9duites des crit\u00e8res les plus faibles.",
+    "- reecritures : exactement 3 passages r\u00e9\u00e9crits pour \u00eatre citables. Appuie-toi sur les extraits r\u00e9els fournis. Chaque version fait 60 mots maximum, donne la r\u00e9ponse d\u00e8s la premi\u00e8re phrase, contient au moins un fait chiffr\u00e9, nomme explicitement l'entit\u00e9 concern\u00e9e et n'emploie aucun mot de renvoi du type celui-ci, cette m\u00e9thode ou comme vu plus haut. Le champ faiblesse indique en une phrase ce qui rendait le passage d'origine non citable.",
   ].join("\n");
 
   // --- Mesures reelles : robots.txt et pages du site, en parallele ---
-  const [robots, site] = await Promise.all([readRobots(url), lireSite(origin)]);
+  const [robots, site, llms] = await Promise.all([
+    readRobots(url),
+    lireSite(origin),
+    getHTML(origin + "/llms.txt", 2000),
+  ]);
+  if (site && site.dispo) site.llmsTxt = !!(llms && llms.html && llms.html.length > 20);
 
   // Domaine inexistant : le DNS ne resout pas.
   if (robots.joignable === false && !site.dispo) {
@@ -697,6 +872,13 @@ exports.handler = async function (event) {
   // Scores calcules par le code, jamais par le modele
   const calcAIO = site.dispo ? scoreAIO(site) : null;
   const calcLLM = site.dispo ? scoreLLM(site, robots) : null;
+  const malus = site.dispo ? calculMalus(site, robots) : { total: 0, liste: [] };
+
+  if (calcAIO) {
+    calcAIO.brut = calcAIO.score;
+    calcAIO.malus = malus;
+    calcAIO.score = Math.max(0, calcAIO.score - malus.total);
+  }
 
   // Criteres consolides. On ne fait expliquer que les points perfectibles,
   // dedupliques, classes par nombre de points perdus, et limites a 6.
