@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Readr / Votre site est-il cit&eacute; par les IA ?</title>
+<title>Readr / Votre m&eacute;dia est-il cit&eacute; par les IA ?</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root{
@@ -98,6 +98,16 @@
   .malus-pt{ flex:none; width:52px; text-align:right; font-weight:700; color:#B0202A; font-size:13.5px; }
   .malus-tot{ margin-top:10px; display:flex; justify-content:space-between; font-size:14px; font-weight:700; }
 
+  .ouv-txt{ margin-top:13px; border-left:3px solid var(--line); background:var(--soft);
+    padding:14px 18px; font-size:14.5px; line-height:1.6; }
+  .ouv-crit{ display:flex; align-items:baseline; gap:12px; padding:9px 0;
+    border-bottom:1px solid var(--line); font-size:14px; }
+  .ouv-crit:first-of-type{ margin-top:14px; border-top:1px solid var(--line); }
+  .ouv-crit:last-of-type{ border-bottom:none; }
+  .ouv-lib{ flex:1; min-width:0; }
+  .ouv-val{ flex:none; font-weight:700; font-size:13px; }
+  .ouv-val.ok{ color:#1B7F3B; } .ouv-val.ko{ color:#B0202A; }
+
   .reec{ padding:16px 0; border-bottom:1px solid var(--line); }
   .reec:first-child{ margin-top:14px; border-top:1px solid var(--line); }
   .reec:last-child{ border-bottom:none; }
@@ -125,15 +135,13 @@
   .sig-line b{ flex:none; width:112px; font-weight:600; color:var(--muted); font-size:13.5px; padding-top:1px; }
   .sig-line span{ flex:1; }
 
-  .preview{ margin-top:20px; border:1.5px solid var(--line); }
-  .preview .top{ background:var(--soft); padding:13px 20px; font-size:14px; color:var(--muted); border-bottom:1px solid var(--line); }
-  .preview .body{ padding:22px 24px; }
-  .preview .q{ font-size:16px; font-weight:600; }
-  .preview .ans{ margin-top:14px; font-size:15.5px; color:#333; }
-  .preview .foot{ margin-top:18px; padding-top:16px; border-top:1px solid var(--line); font-size:14.5px; }
-  .preview .foot b{ font-weight:700; }
-  .preview .foot .why{ color:var(--muted); }
-  .preview .nuance{ margin-top:8px; padding-top:8px; border-top:1px solid var(--line); font-size:13px; }
+  .verdict-box{ margin-top:20px; border:1.5px solid var(--ink); padding:22px 24px; }
+  .verdict-k{ font-size:12.5px; font-weight:600; color:var(--muted); }
+  .verdict-v{ margin-top:7px; font-size:19px; font-weight:800; letter-spacing:-.02em; line-height:1.3; }
+  .verdict-w{ margin-top:9px; font-size:14.5px; color:#3A3A3A; line-height:1.55; }
+  .verdict-n{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line);
+    font-size:13px; color:var(--muted); line-height:1.55; }
+
 
   .reco{ border-top:1px solid var(--line); padding:20px 0; }
   .reco:last-child{ border-bottom:1px solid var(--line); }
@@ -156,7 +164,27 @@
   .alerte-txt{ margin-top:7px; font-size:14px; line-height:1.55; }
 
   .duo{ display:flex; gap:16px; margin-top:26px; flex-wrap:wrap; }
-  .card{ flex:1; min-width:250px; border:1.5px solid var(--ink); padding:20px 22px; }
+  .card{ flex:1; min-width:220px; border:1.5px solid var(--ink); padding:20px 22px; }
+  .card-plein{ background:var(--ink); border-color:var(--ink); color:#fff; }
+  .card-plein .card-kicker{ color:#C9A6FF; }
+  .card-plein .card-score .den{ color:#8C8C8C; }
+  .card-plein .card-cap, .card-plein .card-note{ color:#B8B8B8; }
+
+  .conclu{ margin-top:18px; border-left:3px solid var(--accent); background:var(--tint); padding:20px 24px; }
+  .conclu-t{ font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); }
+  .conclu-x{ margin-top:9px; font-size:15.5px; line-height:1.6; }
+
+  .offre{ margin-top:38px; background:var(--ink); color:#fff; padding:30px 32px; }
+  .offre-k{ font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#C9A6FF; }
+  .offre-t{ margin-top:10px; font-size:22px; font-weight:800; letter-spacing:-.02em; line-height:1.25; }
+  .offre-p{ margin-top:13px; font-size:15px; line-height:1.65; color:#D0D0D0; max-width:620px; }
+  .offre-l{ margin-top:20px; display:flex; gap:24px; flex-wrap:wrap; }
+  .offre-l a{ color:#fff; font-weight:700; font-size:15px; text-decoration:none;
+    border-bottom:2px solid var(--accent); padding-bottom:3px; }
+  .offre-l a:hover{ color:#C9A6FF; }
+
+  .card-accent{ border-color:var(--accent); }
+  .card-accent .card-kicker{ color:var(--accent); }
   .card-kicker{ font-size:12px; font-weight:600; color:var(--accent); }
   .card-title{ margin-top:4px; font-size:17px; font-weight:700; }
   .card-score{ margin-top:14px; font-size:46px; font-weight:800; letter-spacing:-.03em; line-height:1; }
@@ -196,11 +224,6 @@
   .sousbloc{ margin-top:20px; border:1.5px solid var(--line); padding:20px 22px; }
   .sousbloc-t{ font-size:15px; font-weight:700; display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
   .sousbloc-n{ margin-top:8px; font-size:13.5px; color:var(--muted); }
-  .rq{ display:flex; gap:14px; align-items:baseline; padding:11px 0;
-    border-bottom:1px solid var(--line); font-size:14.5px; }
-  .rq:first-child{ margin-top:12px; border-top:1px solid var(--line); }
-  .rq:last-child{ border-bottom:none; }
-  .rq .n{ color:var(--accent); font-weight:800; flex:none; width:26px; }
   .passage{ margin-top:14px; border-left:3px solid var(--accent); background:var(--soft);
     padding:16px 20px; font-size:14.5px; line-height:1.65; font-style:italic; }
   .passage-ko{ margin-top:14px; font-size:14px; color:var(--muted); line-height:1.55; }
@@ -258,8 +281,8 @@
   <section id="step-input">
     <div class="kicker">M&eacute;dias <span class="s">/</span> Presse <span class="s">/</span> &Eacute;diteurs de contenus</div>
     <div class="rule"></div>
-    <h1>Votre site est-il cit&eacute;<br />par les IA ? Faites le test.</h1>
-    <p class="sub">Ce qui emp&ecirc;che les IA de citer vos contenus, et comment le corriger.
+    <h1>Votre m&eacute;dia est-il cit&eacute;<br />par les IA ? Faites le test.</h1>
+    <p class="sub">Ce qui emp&ecirc;che les IA de citer vos articles, et comment le corriger.
       <strong>Diagnostic gratuit en 3 minutes.</strong> Vous recevez votre score de citation et la liste
       des correctifs &agrave; mettre en oeuvre, par ordre de priorit&eacute;.</p>
     <p class="sub sub2">Les AI Overviews de Google r&eacute;pondent d&eacute;sormais &agrave; la place de vos articles.
@@ -268,7 +291,7 @@
     <div class="field">
       <div class="row">
         <div>
-          <label class="label" for="url">Adresse de votre site</label>
+          <label class="label" for="url">Adresse de votre m&eacute;dia</label>
           <input id="url" class="input" type="text" placeholder="economist.com" autocomplete="off" />
         </div>
         <div>
@@ -343,6 +366,21 @@
         <div class="card-cap">de l'accessibilit&eacute; technique aux assistants</div>
         <div class="card-note" id="r-llm-enjeu"></div>
       </div>
+      <div class="card card-plein" id="r-indep-card">
+        <div class="card-kicker">Votre marge de manoeuvre</div>
+        <div class="card-title">Audience en propre</div>
+        <div class="card-score"><span id="r-indep-score"></span><span class="den"> / 100</span></div>
+        <div class="card-cap">de votre capacit&eacute; &agrave; toucher vos lecteurs sans interm&eacute;diaire</div>
+        <div class="card-note">Newsletters, compte, abonnement, notification directe.</div>
+      </div>
+      <div class="card card-accent" id="r-presse-card">
+        <div class="card-kicker">Sp&eacute;cifique presse</div>
+        <div class="card-title">Autorit&eacute; &eacute;ditoriale</div>
+        <div class="card-score"><span id="r-presse-score"></span><span class="den"> / 100</span></div>
+        <div class="card-cap">des marqueurs du travail journalistique</div>
+        <div class="card-note">Balisage presse, page journaliste, sources primaires, verbatims,
+          genre &eacute;ditorial d&eacute;clar&eacute;.</div>
+      </div>
     </div>
 
     <div id="nonmes" class="nonmes hidden">
@@ -375,55 +413,48 @@
 
     <!-- Rapport verrouill&eacute; -->
     <div id="rapport" class="veil">
-      <h2>Google AI Overview : quand Google r&eacute;pond &agrave; la place de vos articles</h2>
+      <h2>Google AI Overview : la r&eacute;ponse affich&eacute;e avant vos articles</h2>
       <p class="h2note">Sur un nombre croissant de recherches, Google r&eacute;dige lui-m&ecirc;me la r&eacute;ponse au-dessus
         des r&eacute;sultats, &agrave; partir de quelques pages qu'il d&eacute;signe comme sources. Le lecteur obtient son
         information sans cliquer. Il ne suffit donc plus d'&ecirc;tre bien class&eacute; sur ces recherches : il faut
         faire partie des pages retenues pour &eacute;crire la r&eacute;ponse. C'est ce que nous mesurons ici.</p>
-      <div class="preview">
-        <div class="top">R&eacute;ponse g&eacute;n&eacute;r&eacute;e pour la recherche suivante</div>
-        <div class="body">
-          <div class="q" id="r-query"></div>
-          <div class="ans" id="r-answer"></div>
-          <div class="foot">
-            <b id="r-cit-verdict"></b>
-            <div class="why" id="r-cit-why"></div>
-            <div class="why nuance"><b>Deux situations &agrave; ne pas confondre.</b> Google peut citer le nom
-              de votre m&eacute;dia dans le texte de sa r&eacute;ponse, simplement parce qu'il est connu, sans utiliser
-              vos pages. Il peut aussi d&eacute;signer vos pages comme sources, avec un lien vers elles : c'est
-              le seul cas qui vous rapporte de la visibilit&eacute;, et c'est celui que nous mesurons. La question
-              test&eacute;e ne contient volontairement aucun nom de marque, afin d'&eacute;valuer votre pr&eacute;sence sur le
-              sujet et non votre notori&eacute;t&eacute;.</div>
-          </div>
-        </div>
+      <div class="verdict-box">
+        <div class="verdict-k">Probabilit&eacute; d'&ecirc;tre retenu comme source</div>
+        <div class="verdict-v" id="r-cit-verdict"></div>
+        <div class="verdict-w" id="r-cit-why"></div>
+        <div class="verdict-n">Cette conclusion d&eacute;coule du score calcul&eacute; plus bas, lui-m&ecirc;me issu de la
+          lecture de vos pages. <b>Aucun &eacute;l&eacute;ment de ce rapport n'est simul&eacute;</b> : nous n'inventons ni
+          requ&ecirc;te, ni r&eacute;ponse g&eacute;n&eacute;rative, ni statistique. Tout ce qui suit provient de vos contenus.</div>
       </div>
 
-      <div class="sousbloc" id="r-autres-bloc">
-        <div class="sousbloc-t">Trois autres recherches de votre th&eacute;matique</div>
-        <p class="sousbloc-n">Le m&ecirc;me m&eacute;canisme s'applique &agrave; ces questions. Elles donnent une id&eacute;e de
-          l'&eacute;tendue des recherches sur lesquelles vos pages sont en concurrence pour &ecirc;tre cit&eacute;es.</p>
-        <div id="r-autres"></div>
+      <div class="sousbloc" id="r-ouv-bloc">
+        <div class="sousbloc-t">Votre paragraphe d'ouverture
+          <span class="measured">Donn&eacute;e v&eacute;rifi&eacute;e</span></div>
+        <p class="sousbloc-n">C'est le premier paragraphe qu'un moteur lit pour d&eacute;cider si votre article
+          r&eacute;pond &agrave; la question. Trois conditions le rendent exploitable : rester sous une soixantaine de
+          mots, contenir une donn&eacute;e concr&egrave;te, et se comprendre sans avoir lu ce qui pr&eacute;c&egrave;de.</p>
+        <div id="r-ouv"></div>
       </div>
 
       <div class="sousbloc">
-        <div class="sousbloc-t">Le passage de vos pages le plus susceptible d'&ecirc;tre repris
+        <div class="sousbloc-t">Le passage de vos articles le plus susceptible d'&ecirc;tre repris
           <span class="measured">Donn&eacute;e v&eacute;rifi&eacute;e</span></div>
         <p class="sousbloc-n">Google ne reprend jamais un article entier. Il en extrait une ou deux phrases,
           &agrave; condition qu'elles r&eacute;pondent &agrave; la question et qu'elles restent compr&eacute;hensibles sorties de leur
-          contexte. Voici, parmi les pages analys&eacute;es, celle qui remplit le mieux ces conditions.</p>
+          contexte. Voici, parmi les articles analys&eacute;s, le passage qui remplit le mieux ces conditions.</p>
         <div id="r-passage"></div>
       </div>
 
       <div class="sousbloc" id="r-reec-bloc">
         <div class="sousbloc-t">Trois exemples de passages pr&ecirc;ts &agrave; &ecirc;tre cit&eacute;s</div>
-        <p class="sousbloc-n">Nous avons repris trois passages de vos pages et les avons reformul&eacute;s selon
+        <p class="sousbloc-n">Nous avons repris trois passages de vos articles et les avons reformul&eacute;s selon
           les r&egrave;gles qui favorisent la reprise : la r&eacute;ponse d&egrave;s la premi&egrave;re phrase, un chiffre dat&eacute;, le nom
           de l'entit&eacute; &eacute;crit en toutes lettres, aucun renvoi au reste de l'article. Ils servent de mod&egrave;le &agrave;
           votre r&eacute;daction et sont directement r&eacute;utilisables.</p>
         <div id="r-reec"></div>
       </div>
 
-      <h2>Assistants IA : votre site leur est-il accessible ?</h2>
+      <h2>Assistants IA : vos articles leur sont-ils accessibles ?</h2>
       <p class="h2note">ChatGPT, Perplexity, Gemini et Claude ne lisent pas l'index Google. Ils d&eacute;pendent
         de leurs propres robots et des mentions de votre marque ailleurs sur le web. Ce score mesure
         uniquement ce qui est v&eacute;rifiable automatiquement, &agrave; savoir l'acc&egrave;s de leurs robots et la
@@ -437,12 +468,23 @@
         <div class="llm-why" id="r-acces-note"></div>
       </div>
 
-      <h2>Ce que nous avons mesur&eacute; sur votre site</h2>
-      <p class="h2note">Nous avons ouvert plusieurs pages de votre site et relev&eacute; ces &eacute;l&eacute;ments dans leur
+      <h2>Autorit&eacute; &eacute;ditoriale : les marqueurs du travail journalistique</h2>
+      <p class="h2note">Les moteurs de r&eacute;ponse ne traitent pas un m&eacute;dia comme un site quelconque. Ils
+        cherchent les marqueurs du travail journalistique : un contenu d&eacute;clar&eacute; comme presse, une signature
+        rattach&eacute;e &agrave; un journaliste identifiable, des sources primaires cit&eacute;es, des verbatims. Ces crit&egrave;res
+        n'apparaissent dans aucun outil d'analyse g&eacute;n&eacute;raliste, et ce sont eux qui font la diff&eacute;rence sur
+        les sujets d'actualit&eacute;.</p>
+      <div class="calc" id="r-calc-presse">
+        <div class="calc-head">Autorit&eacute; &eacute;ditoriale <span id="r-calc-presse-total"></span></div>
+        <div id="r-calc-presse-list"></div>
+      </div>
+
+      <h2>Ce que nous avons mesur&eacute; sur vos articles</h2>
+      <p class="h2note">Nous avons ouvert plusieurs articles de votre site et relev&eacute; ces &eacute;l&eacute;ments dans leur
         code. Ce sont des constats, pas des estimations : ils fondent les deux scores ci-dessus.</p>
       <div class="robots" id="r-site-block">
         <div class="robots-head">
-          <span class="robots-title">Lecture de vos pages</span>
+          <span class="robots-title">Lecture de vos articles</span>
           <span class="measured">Donn&eacute;es v&eacute;rifi&eacute;es</span>
         </div>
         <p class="robots-intro" id="r-site-intro"></p>
@@ -482,9 +524,39 @@
       <div id="r-signals"></div>
       <p class="bridge">Ces constats donnent la checklist ci-dessous.</p>
 
+      <h2>Notre lecture de ces r&eacute;sultats</h2>
+      <div class="conclu">
+        <div class="conclu-t" id="r-dep-t">En r&eacute;sum&eacute;</div>
+        <div class="conclu-x" id="r-dependance"></div>
+      </div>
+
+      <p class="h2note">Les trois premiers scores portent sur des plateformes dont les r&egrave;gles vous &eacute;chappent.
+        Travailler ces crit&egrave;res reste utile, mais vous restez tributaire de d&eacute;cisions qui peuvent changer du
+        jour au lendemain. Le score ci-dessous porte sur autre chose : les canaux par lesquels vous joignez
+        vos lecteurs directement.</p>
+      <div class="calc" id="r-calc-indep">
+        <div class="calc-head">Audience en propre <span id="r-calc-indep-total"></span></div>
+        <div id="r-calc-indep-list"></div>
+        <p class="calc-note" id="r-reseaux-note"></p>
+      </div>
+
       <h2>Votre checklist de correctifs</h2>
       <p class="h2note" id="r-recos-note"></p>
       <div id="r-recos"></div>
+
+      <div class="offre">
+        <div class="offre-k">Pour aller plus loin</div>
+        <div class="offre-t">Reprendre la main sur votre audience.</div>
+        <p class="offre-p">Readr est une agence ind&eacute;pendante sp&eacute;cialis&eacute;e sur les m&eacute;dias et l'abonnement.
+          Nous intervenons sur ce qui vous appartient : strat&eacute;gie CRM et marketing automation, offre de
+          newsletters, parcours de connexion et d'abonnement, acquisition diversifi&eacute;e, exploitation de vos
+          donn&eacute;es. Une partie des correctifs ci-dessus rel&egrave;ve de votre &eacute;quipe technique ou de votre
+          r&eacute;daction. La transformation de votre audience en base d'abonn&eacute;s, c'est notre m&eacute;tier.</p>
+        <div class="offre-l">
+          <a href="https://www.readr.agency/rendezvous" target="_blank" rel="noopener">Prendre rendez-vous</a>
+          <a href="https://www.readr.agency/" target="_blank" rel="noopener">readr.agency</a>
+        </div>
+      </div>
     </div>
 
     <div id="done" class="done hidden">Rapport complet affich&eacute;. Nous revenons vers vous prochainement.</div>
@@ -509,45 +581,51 @@
 
 <script>
   var LOADING_MSGS = [
-    "Analyse de vos contenus",
-    "Reconstitution d'une recherche lecteur",
-    "Simulation de la r\u00e9ponse g\u00e9n\u00e9rative",
-    "\u00c9valuation de vos crit\u00e8res de citation"
+    "Lecture de votre fichier robots.txt",
+    "Lecture de vos articles article",
+    "Releve du balisage et des dates",
+    "Calcul de vos deux scores"
   ];
   var ETAT_MESURE = { present:"Pr\u00e9sent", partiel:"Partiel", absent:"Absent" };
   var SITE_OK = "Analyse de {n} page(s) de votre site.";
-  var SITE_KO = "Vos pages n'ont pas pu \u00eatre lues.";
-  var LB_SCHEMA = "Balisage Article (donn\u00e9es structur\u00e9es)";
-  var LB_AUTEUR_S = "Auteur dans les donn\u00e9es structur\u00e9es";
+  var SITE_KO = "Vos pages n'ont pas pu etre lues.";
+  var LB_SCHEMA = "Balisage Article (donnees structurees)";
+  var LB_AUTEUR_S = "Auteur dans les donnees structurees";
   var LB_AUTEUR_V = "Signature visible sur la page";
   var LB_DATE_PUB = "Date de publication";
-  var LB_DATE_MAJ = "Date de mise \u00e0 jour";
+  var LB_DATE_MAJ = "Date de mise a jour";
   var LB_LONGUEUR = "Longueur moyenne des pages";
-  var LB_CHIFFRES = "Donn\u00e9es chiffr\u00e9es par page";
+  var LB_CHIFFRES = "Donnees chiffrees par page";
   var MOTS = "mots";
   var ETAT_BOT = { bloque:"Bloqu\u00e9", partiel:"Partiel", autorise:"Autoris\u00e9" };
-  var ROBOTS_OK_0 = "Aucun des {n} robots IA courants n'est bloqu\u00e9 sur votre site.";
-  var ROBOTS_OK_N = "{b} robots IA sur {n} sont bloqu\u00e9s sur votre site.";
-  var ROBOTS_KO = "Votre fichier robots.txt n'a pas pu \u00eatre lu.";
+  var ROBOTS_OK_0 = "Aucun des {n} robots IA courants n'est bloque sur votre site.";
+  var ROBOTS_OK_N = "{b} robots IA sur {n} sont bloques sur votre site.";
+  var ROBOTS_KO = "Votre fichier robots.txt n'a pas pu etre lu.";
+  var OUV_L = "Longueur : {n} mots, pour une cible de 60 au maximum";
+  var OUV_C = "Contient une donn\u00e9e concr\u00e8te (chiffre, date, montant)";
+  var OUV_A = "Se comprend sans avoir lu ce qui pr\u00e9c\u00e8de";
+  var OUI = "Oui";
+  var NON = "Non";
+  var NOTE_RESEAUX = "Nous avons par ailleurs releve {n} lien(s) vers des reseaux sociaux : ces canaux apportent de l audience, mais la relation y appartient a la plateforme, pas a vous.";
   var MALUS_T = "Points retir\u00e9s : blocages d'extraction";
   var MALUS_B = "Sous-total avant blocages : {b} / 100";
-  var PASSAGE_KO = "Aucun passage clairement extractible n'a \u00e9t\u00e9 rep\u00e9r\u00e9 sur vos pages. Les paragraphes sont soit trop longs, soit trop d\u00e9pendants de leur contexte pour \u00eatre repris tels quels.";
-  var ALERTE_T = "{b} robot(s) de r\u00e9cup\u00e9ration bloqu\u00e9(s) sur {n}";
-  var ALERTE_X = "Sont concern\u00e9s : {l}. Ces robots conditionnent directement la citation de vos pages par ChatGPT, Perplexity ou Copilot. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'\u00eatre technique.";
-  var ALERTE_T2 = "{b} robot(s) d'entra\u00eenement bloqu\u00e9(s) sur {n}";
-  var ALERTE_X2 = "Sont concern\u00e9s : {l}. Ces robots alimentent l'entra\u00eenement des mod\u00e8les. Les bloquer n'emp\u00eache pas Google d'afficher un AI Overview \u00e0 partir de vos pages, qui repose sur l'index de recherche classique.";
+  var PASSAGE_KO = "Aucun passage clairement extractible n'a ete repere sur vos pages. Les paragraphes sont soit trop longs, soit trop dependants de leur contexte pour etre repris tels quels.";
+  var ALERTE_T = "{b} robot(s) de recuperation bloque(s) sur {n}";
+  var ALERTE_X = "Sont concernes : {l}. Ces robots conditionnent directement la citation de vos pages par ChatGPT, Perplexity ou Copilot. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'etre technique.";
+  var ALERTE_T2 = "{b} robot(s) d'entrainement bloque(s) sur {n}";
+  var ALERTE_X2 = "Sont concernes : {l}. Ces robots alimentent l'entrainement des modeles. Les bloquer n'empeche pas Google d'afficher un AI Overview a partir de vos pages, qui reposent sur l'index de recherche classique.";
   var RAISONS = {
-    "page d'accueil illisible": "Votre site a refus\u00e9 notre requ\u00eate de lecture, ce qui arrive avec certaines protections anti-robots.",
-    "aucun article accessible": "Nous avons atteint votre site mais n'avons pas pu identifier de page \u00e0 analyser depuis l'accueil.",
-    "robots.txt inaccessible": "Votre site a refus\u00e9 notre requ\u00eate de lecture."
+    "page d'accueil illisible": "Votre site a refuse notre requete de lecture, ce qui arrive avec certaines protections anti-robots.",
+    "aucun article accessible": "Nous avons atteint votre site mais n'avons pas pu identifier de page a analyser depuis l'accueil.",
+    "robots.txt inaccessible": "Votre site a refuse notre requete de lecture."
   };
-  var RAISON_DEFAUT = "Vos pages n'ont pas pu \u00eatre lues automatiquement.";
+  var RAISON_DEFAUT = "Vos pages n'ont pas pu etre lues automatiquement.";
   var PTS_PERDUS = "points perdus";
   var REDIR = "redirection depuis";
   var TXT_ATTENTE = "Affichage en cours";
   var TXT_BOUTON = "Afficher le rapport complet";
-  var MODE_LU = "Scores calcul\u00e9s sur {n} page(s) lue(s) sur votre site";
-  var MODE_NONLU = "Pages non lisibles, aucun score calcul\u00e9";
+  var MODE_LU = "Scores calcules sur {n} page(s) lue(s) sur votre site";
+  var MODE_NONLU = "Pages non lisibles, aucun score calcule";
   var ERR_DOMAINE = "Indiquez le domaine complet avec son extension, par exemple economist.com";
   var PRESENCE = { forte:"Bonne", partielle:"Partielle", faible:"Faible" };
   var ACCES = { ouvert:"Ouvert", partiel:"Partiel", restreint:"Restreint", indetermine:"Ind\u00e9termin\u00e9" };
@@ -555,9 +633,9 @@
   var MOT_AFAIRE = "\u00c0 faire";
   var NOTE_RECOS = " correctifs \u00e0 mettre en oeuvre, du plus prioritaire au moins prioritaire.";
   var CIT = {
-    probable: "Vos pages figureraient probablement parmi les sources cit\u00e9es sous cette r\u00e9ponse.",
-    partielle: "Vos pages pourraient \u00eatre utilis\u00e9es, sans figurer parmi les sources cit\u00e9es.",
-    improbable: "Vos pages ne figureraient probablement pas parmi les sources cit\u00e9es."
+    probable: "Vos pages figureraient probablement parmi les sources citees sous cette reponse.",
+    partielle: "Vos pages pourraient etre utilisees, sans figurer parmi les sources citees.",
+    improbable: "Vos pages ne figureraient probablement pas parmi les sources citees."
   };
 
   var el = function(id){ return document.getElementById(id); };
@@ -661,6 +739,8 @@
     // Site illisible : aucun score n'est affiche, on le dit clairement.
     if(!data.mesurable || !aio || !llm){
       el("r-aio-score").textContent = "\u2013";
+      el("r-presse-score").textContent = "\u2013";
+      el("r-indep-score").textContent = "\u2013";
       el("r-llm-score").textContent = "\u2013";
       el("r-aio-enjeu").textContent = "";
       el("r-llm-enjeu").textContent = "";
@@ -674,19 +754,24 @@
       el("r-aio-enjeu").textContent = aio.enjeu || "";
       el("r-llm-enjeu").textContent = llm.enjeu || "";
 
-      el("r-query").textContent = aio.requete || "";
 
-      // autres requetes de test
-      var autres = aio.autresRequetes || [];
-      if(autres.length){
-        var hq = "";
-        autres.forEach(function(q, i){
-          hq += '<div class="rq"><span class="n">0'+(i+2)+'</span><span>'+esc(q)+'</span></div>';
+      // paragraphe d'ouverture reel, avec ses trois criteres mesures
+      if(aio.ouverture){
+        var mots = aio.ouvertureMots || 0;
+        var lignes = [
+          [OUV_L.replace("{n}", mots), mots <= 60],
+          [OUV_C, !!aio.ouvertureChiffre],
+          [OUV_A, !aio.ouvertureRenvoi]
+        ];
+        var ho = '<div class="ouv-txt">' + esc(aio.ouverture) + '</div>';
+        lignes.forEach(function(l){
+          ho += '<div class="ouv-crit"><span class="ouv-lib">'+esc(l[0])+'</span>'
+              + '<span class="ouv-val '+(l[1]?"ok":"ko")+'">'+(l[1]?OUI:NON)+'</span></div>';
         });
-        el("r-autres").innerHTML = hq;
-        el("r-autres-bloc").classList.remove("hidden");
+        el("r-ouv").innerHTML = ho;
+        el("r-ouv-bloc").classList.remove("hidden");
       } else {
-        el("r-autres-bloc").classList.add("hidden");
+        el("r-ouv-bloc").classList.add("hidden");
       }
 
       // reecritures citables
@@ -707,7 +792,6 @@
       el("r-passage").innerHTML = aio.passage
         ? '<div class="passage">'+esc(aio.passage)+'</div>'
         : '<div class="passage-ko">'+PASSAGE_KO+'</div>';
-      el("r-answer").textContent = aio.apercu || "";
       var v = (aio.citation && aio.citation.verdict) || "improbable";
       if(!CIT[v]) v = "improbable";
       el("r-cit-verdict").textContent = CIT[v];
@@ -720,6 +804,23 @@
 
       renderCalc("r-calc-aio", aio);
       renderMalus(aio);
+      if(data.independance){
+        el("r-indep-score").textContent = data.independance.score;
+        renderCalc("r-calc-indep", data.independance);
+        el("r-reseaux-note").textContent = data.independance.reseaux > 0
+          ? NOTE_RESEAUX.replace("{n}", data.independance.reseaux) : "";
+        el("r-indep-card").classList.remove("hidden");
+      } else {
+        el("r-indep-card").classList.add("hidden");
+      }
+      el("r-dependance").textContent = data.dependance || "";
+      if(data.presse){
+        el("r-presse-score").textContent = data.presse.score;
+        renderCalc("r-calc-presse", data.presse);
+        el("r-presse-card").classList.remove("hidden");
+      } else {
+        el("r-presse-card").classList.add("hidden");
+      }
       renderCalc("r-calc-llm", llm);
     }
 
