@@ -23,7 +23,12 @@ exports.handler = async function (event) {
         email: d.email,
         url: d.url || "",
         site: d.site || "",
-        score: d.score || "",
+        theme: d.theme || "",
+        scoreAio: (d.scoreAio === 0 || d.scoreAio) ? d.scoreAio : "",
+        scoreLlm: (d.scoreLlm === 0 || d.scoreLlm) ? d.scoreLlm : "",
+        pagesLues: d.pagesLues || 0,
+        robotsBloques: (d.robotsBloques === 0 || d.robotsBloques) ? d.robotsBloques : "",
+        robotsTotal: d.robotsTotal || "",
         consent: d.consent ? "oui" : "non",
       }),
     });
