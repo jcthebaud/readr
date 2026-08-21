@@ -117,6 +117,7 @@
 
   .calc-note{ margin-top:14px; font-size:12.5px; color:var(--muted); }
 
+  .nonmes-detail{ margin-top:10px; font-size:12px; color:var(--muted); font-family:monospace; }
   .nonmes-plus{ margin-top:8px; font-size:13.5px; color:var(--muted); }
   #nonmes-raison{ margin-top:6px; }
 
@@ -422,6 +423,19 @@
       <b>Aucun score n'a pu être calculé.</b>
       <div id="nonmes-raison"></div>
       <div class="nonmes-plus">Nous préférons ne rien afficher plutôt qu'une estimation.</div>
+      <div class="nonmes-detail" id="nonmes-detail"></div>
+    </div>
+
+    <div id="r-partiel" class="hidden">
+      <h2>Ce que nous avons tout de même pu vérifier</h2>
+      <p class="h2note">Votre fichier robots.txt est accessible : il indique quels robots IA ont le droit
+        de lire vos articles.</p>
+      <div class="robots">
+        <div class="robots-head"><span class="robots-title">Robots IA déclarés dans votre robots.txt</span>
+          <span class="measured">Donnée vérifiée</span></div>
+        <p class="robots-intro" id="r-robots-intro-2"></p>
+        <div id="r-robots-list-2"></div>
+      </div>
     </div>
 
     <div class="noprint">
@@ -565,6 +579,7 @@
       "pages inaccessibles"             : "Vos articles n'ont pas pu être atteints.",
       defaut                            : "Vos articles n'ont pas pu être lus automatiquement."
     },
+    detailTechnique: "Détail technique :",
     boutonAttente : "Affichage en cours",
     boutonNormal  : "Afficher le rapport complet"
   };
@@ -645,7 +660,19 @@
       el("r-synthese").textContent = "";
       el("r-meta").textContent = T.articlesNon;
       el("nonmes-raison").textContent = T.raisons[data.raison] || T.raisons.defaut;
-      show("nonmes"); hide("rapport"); hide("gate");
+      var j = (data.journal || []);
+      el("nonmes-detail").textContent = j.length ? (T.detailTechnique + " " + j.join(" ; ")) : "";
+      show("nonmes");
+      // Le fichier robots.txt reste exploitable : on affiche cette partie et on garde la capture.
+      if(data.robots && data.robots.dispo){
+        alerteRobots(data.robots);
+        robots(data.robots);
+        el("r-partiel").classList.remove("hidden");
+        show("gate");
+      } else {
+        hide("gate");
+      }
+      hide("rapport");
       return;
     }
     hide("nonmes"); show("rapport"); show("gate");
@@ -757,7 +784,9 @@
 
   function robots(rb){
     if(!rb || !rb.dispo){ el("r-robots-intro").textContent = T.robotsIllisible; el("r-robots-list").innerHTML=""; return; }
-    el("r-robots-intro").textContent = rb.nbBloques===0
+    var cible = document.getElementById("r-robots-list").offsetParent === null &&
+                !el("r-partiel").classList.contains("hidden") ? "-2" : "";
+    el("r-robots-intro" + cible).textContent = rb.nbBloques===0
       ? fmt(T.robotsAucun,{n:rb.nbTotal}) : fmt(T.robotsBloques,{b:rb.nbBloques,n:rb.nbTotal});
     var h="";
     (rb.bots||[]).forEach(function(b){
@@ -766,7 +795,7 @@
          + '<span class="bot-org">'+esc(b.org)+'</span>'
          + '<span class="bot-state '+e+'">'+T.etatsRobots[e]+'</span></div>';
     });
-    el("r-robots-list").innerHTML = h;
+    el("r-robots-list" + cible).innerHTML = h;
   }
 
   async function debloquer(){
