@@ -22,32 +22,54 @@ function domaineValide(host) {
 // Les delais sont courts et les appels parallelises : la fonction doit tenir
 // dans le temps d'execution alloue par Netlify.
 
-const UA = { "user-agent": "ReadrDiagnostic/1.0 (+https://www.readr.agency)" };
+// Deux identites. Certains sites de presse refusent un agent inconnu :
+// on retente alors avec une identite de navigateur classique.
+const UA_READR = {
+  "user-agent": "ReadrDiagnostic/1.0 (+https://www.readr.agency)",
+  "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "accept-language": "fr-FR,fr;q=0.9",
+};
+const UA_NAVIGATEUR = {
+  "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+  "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "accept-language": "fr-FR,fr;q=0.9",
+};
 
-async function getHTML(u, ms) {
+// Journal des echecs, remonte au rapport pour rendre toute panne explicable.
+const JOURNAL = [];
+
+async function tenter(u, ms, entetes) {
   const ctrl = new AbortController();
-  const timer = setTimeout(function () { ctrl.abort(); }, ms || 2500);
+  const timer = setTimeout(function () { ctrl.abort(); }, ms);
   try {
-    const r = await fetch(u, { signal: ctrl.signal, redirect: "follow", headers: UA });
+    const r = await fetch(u, { signal: ctrl.signal, redirect: "follow", headers: entetes });
     clearTimeout(timer);
-    if (!r.ok) return null;
+    if (!r.ok) return { ok: false, motif: "HTTP " + r.status };
     const ct = r.headers.get("content-type") || "";
-    if (ct && ct.indexOf("html") === -1) return null;
+    if (ct && ct.indexOf("html") === -1) return { ok: false, motif: "type " + ct.split(";")[0] };
     const brut = await r.text();
-    // Les pages de presse depassent souvent 400 000 caracteres. Tronquer au debut
-    // faisait disparaitre le pied de page, donc les liens application et abonnement.
-    const txt = brut.length > 900000
-      ? brut.slice(0, 600000) + " " + brut.slice(-300000)
-      : brut;
-    return {
-      html: txt,
-      urlFinale: r.url || u,
-      xRobots: r.headers.get("x-robots-tag") || "",
-    };
+    // On conserve le debut et la fin : le pied de page porte les liens utiles.
+    const txt = brut.length > 900000 ? brut.slice(0, 600000) + " " + brut.slice(-300000) : brut;
+    return { ok: true, html: txt, urlFinale: r.url || u, xRobots: r.headers.get("x-robots-tag") || "" };
   } catch (e) {
     clearTimeout(timer);
+    const code = (e && e.cause && e.cause.code) || (e.name === "AbortError" ? "delai depasse" : "erreur reseau");
+    return { ok: false, motif: code };
+  }
+}
+
+async function getHTML(u, ms) {
+  const delai = ms || 6000;
+  let r = await tenter(u, delai, UA_READR);
+  if (!r.ok && r.motif !== "delai depasse") {
+    // Un refus peut venir de l'agent declare : seconde tentative en navigateur.
+    r = await tenter(u, delai, UA_NAVIGATEUR);
+  }
+  if (!r.ok) {
+    if (JOURNAL.length < 6) JOURNAL.push(u.replace(/^https?:\/\//, "").slice(0, 60) + " : " + r.motif);
     return null;
   }
+  return { html: r.html, urlFinale: r.urlFinale, xRobots: r.xRobots };
 }
 
 // Retire scripts, styles et balises pour obtenir le texte visible.
@@ -330,7 +352,7 @@ function niveau(compte, total) {
 }
 
 async function lireSite(origin) {
-  const rep = await getHTML(origin, 2500);
+  const rep = await getHTML(origin, 6000);
   if (!rep) return { dispo: false, raison: "page d'accueil illisible" };
   const accueil = rep.html;
 
@@ -339,7 +361,7 @@ async function lireSite(origin) {
 
   const urls = trouverArticles(accueil, originFinal);
   // En parallele : douze pages coutent le meme temps qu'une seule.
-  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 3500); }));
+  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 5000); }));
 
   let atteintes = 0;
   const candidates = [];
@@ -589,7 +611,7 @@ async function readRobots(siteUrl) {
     const r = await fetch(origin + "/robots.txt", {
       signal: ctrl.signal,
       redirect: "follow",
-      headers: { "user-agent": "ReadrDiagnostic/1.0 (+https://www.readr.agency)" },
+      headers: UA_READR,
     });
     clearTimeout(timer);
     if (!r.ok) return { dispo: false, joignable: true, raison: "robots.txt inaccessible (HTTP " + r.status + ")" };
@@ -1041,6 +1063,8 @@ exports.handler = async function (event) {
              body: JSON.stringify(obj) };
   };
 
+  JOURNAL.length = 0;
+
   let body;
   try { body = JSON.parse(event.body || "{}"); } catch (e) { body = {}; }
   const url = (body.url || "").trim();
@@ -1074,6 +1098,7 @@ exports.handler = async function (event) {
       mesurable: false,
       hostFinal: hostFinal, redirige: redirige, theme: theme,
       raison: site.raison || "",
+      journal: JOURNAL.slice(0, 6),
       robots: robots,
       site_: site,
     });
