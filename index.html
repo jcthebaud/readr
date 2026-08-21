@@ -205,12 +205,14 @@
   .robots-title{ font-size:15px; font-weight:700; }
   .measured{ font-size:11.5px; font-weight:600; padding:3px 9px;
     border:1px solid var(--accent); color:var(--accent); }
+  .robots-legende{ margin-top:9px; font-size:13px; color:var(--muted); line-height:1.55; }
   .robots-intro{ margin-top:9px; font-size:14px; color:#3A3A3A; }
   .bot{ display:flex; align-items:baseline; gap:16px; padding:10px 0;
     border-bottom:1px solid var(--line); font-size:14px; }
   .bot:first-of-type{ border-top:1px solid var(--line); margin-top:14px; }
   .bot-name{ flex:1; min-width:0; font-weight:600; }
-  .bot-org{ flex:none; width:160px; color:var(--muted); font-size:13px; }
+  .bot-usage{ flex:none; width:110px; color:var(--muted); font-size:12.5px; }
+  .bot-org{ flex:none; width:150px; color:var(--muted); font-size:13px; }
   .bot-state{ flex:none; width:84px; text-align:right; font-weight:700; font-size:13px; }
   .bot-state.bloque{ color:#B0202A; }
   .bot-state.partiel{ color:#9A6200; }
@@ -402,7 +404,7 @@
       <div class="syn-duo">
         <div class="syn-s">
           <div class="syn-n" id="r-cit-score">–</div>
-          <div class="syn-l">Citabilité par les IA</div>
+          <div class="syn-l">Potentiel de citation</div>
           <div class="syn-c">Conditions réunies pour que vos articles soient cités comme source</div>
         </div>
         <div class="syn-s syn-s2">
@@ -424,18 +426,6 @@
       <div id="nonmes-raison"></div>
       <div class="nonmes-plus">Nous préférons ne rien afficher plutôt qu'une estimation.</div>
       <div class="nonmes-detail" id="nonmes-detail"></div>
-    </div>
-
-    <div id="r-partiel" class="hidden">
-      <h2>Ce que nous avons tout de même pu vérifier</h2>
-      <p class="h2note">Votre fichier robots.txt est accessible : il indique quels robots IA ont le droit
-        de lire vos articles.</p>
-      <div class="robots">
-        <div class="robots-head"><span class="robots-title">Robots IA déclarés dans votre robots.txt</span>
-          <span class="measured">Donnée vérifiée</span></div>
-        <p class="robots-intro" id="r-robots-intro-2"></p>
-        <div id="r-robots-list-2"></div>
-      </div>
     </div>
 
     <div class="noprint">
@@ -467,14 +457,19 @@
       <p class="h2note">Les critères sur lesquels vous perdez le plus de points, avec l'action correspondante.</p>
       <div id="r-recos"></div>
 
-      <h2>Votre paragraphe d'ouverture</h2>
-      <p class="h2note">C'est le premier paragraphe qu'un moteur lit pour décider si votre article répond à
-        la question. Trois conditions le rendent exploitable.</p>
+      <h2>Le premier paragraphe de vos articles</h2>
+      <p class="h2note">Nous avons relevé le paragraphe d'attaque d'un de vos articles, tel qu'il figure
+        dans le corps du texte. C'est celui qu'un moteur lit en premier pour décider si votre article
+        répond à la question posée. Trois conditions le rendent exploitable : rester court, contenir une
+        donnée concrète, et se comprendre sans avoir lu ce qui précède.</p>
       <div id="r-ouv"></div>
 
-      <h2>Le passage le plus susceptible d'être repris</h2>
-      <p class="h2note">Un moteur extrait une ou deux phrases, à condition qu'elles répondent à la question
-        et restent compréhensibles hors contexte.</p>
+      <h2>Un exemple de passage reprenable</h2>
+      <p class="h2note">Un moteur de réponse ne cite jamais un article entier : il en extrait une ou deux
+        phrases. Parmi tous les paragraphes de vos articles analysés, voici celui qui remplit le mieux les
+        conditions de reprise : une longueur de vingt-cinq à soixante-dix mots, au moins une donnée
+        vérifiable, une phrase complète, et aucun mot renvoyant à ce qui précède. Il sert d'exemple de ce
+        que vos contenus offrent déjà.</p>
       <div id="r-passage"></div>
 
       <div class="sousbloc hidden" id="r-reec-bloc">
@@ -495,6 +490,10 @@
         <div class="robots-head"><span class="robots-title">Robots IA déclarés dans votre robots.txt</span>
           <span class="measured">Donnée vérifiée</span></div>
         <p class="robots-intro" id="r-robots-intro"></p>
+        <p class="robots-legende">Deux usages à distinguer. Les robots de <b>récupération</b> viennent lire
+          vos pages au moment où un lecteur pose sa question : les bloquer empêche toute citation. Les
+          robots d'<b>entraînement</b> alimentent l'apprentissage des modèles : les bloquer relève d'un
+          arbitrage sur les droits, sans effet direct sur votre visibilité immédiate.</p>
         <div id="r-robots-list"></div>
       </div>
       <p class="calc-note" id="r-reseaux-note"></p>
@@ -568,6 +567,8 @@
     robotsBloques : "{b} robots IA sur {n} sont bloqués sur votre site.",
     robotsIllisible: "Votre fichier robots.txt n'a pas pu être lu.",
     etatsRobots   : { bloque: "Bloqué", partiel: "Partiel", autorise: "Autorisé" },
+    usageRecup    : "Récupération",
+    usageEntrain  : "Entraînement",
     alerteRecupT  : "{b} robot(s) de récupération bloqué(s) sur {n}",
     alerteRecupX  : "Sont concernés : {l}. Ces robots conditionnent directement la citation de vos articles. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'être technique.",
     alerteEntrT   : "{b} robot(s) d'entraînement bloqué(s) sur {n}",
@@ -579,6 +580,7 @@
       "pages inaccessibles"             : "Vos articles n'ont pas pu être atteints.",
       defaut                            : "Vos articles n'ont pas pu être lus automatiquement."
     },
+    viaPlan       : "Votre page d'accueil n'étant pas accessible depuis un serveur, les articles ont été trouvés via votre plan de site.",
     detailTechnique: "Détail technique :",
     boutonAttente : "Affichage en cours",
     boutonNormal  : "Afficher le rapport complet"
@@ -663,24 +665,19 @@
       var j = (data.journal || []);
       el("nonmes-detail").textContent = j.length ? (T.detailTechnique + " " + j.join(" ; ")) : "";
       show("nonmes");
-      // Le fichier robots.txt reste exploitable : on affiche cette partie et on garde la capture.
-      if(data.robots && data.robots.dispo){
-        alerteRobots(data.robots);
-        robots(data.robots);
-        el("r-partiel").classList.remove("hidden");
-        show("gate");
-      } else {
-        hide("gate");
-      }
+      // Le robots.txt reste souvent lisible : on conserve cette partie et la capture.
+      if(data.robots && data.robots.dispo){ robots(data.robots); show("gate"); }
+      else { hide("gate"); }
       hide("rapport");
       return;
     }
     hide("nonmes"); show("rapport"); show("gate");
 
-    el("r-cit-score").textContent = data.citabilite.score;
+    el("r-cit-score").textContent = data.potentiel.score;
     el("r-aud-score").textContent = data.audience.score;
     el("r-synthese").textContent = data.synthese || "";
-    el("r-meta").textContent = fmt(T.articlesLus, { n: data.site_.nbPages, t: data.site_.nbTentees });
+    el("r-meta").textContent = fmt(T.articlesLus, { n: data.site_.nbPages, t: data.site_.nbTentees })
+      + (data.site_.viaPlanDeSite ? " " + T.viaPlan : "");
 
     // priorités
     var h = "";
@@ -730,7 +727,7 @@
     (data.constats||[]).forEach(function(c){
       if(c.famille !== famille){
         famille = c.famille;
-        var s = famille === "Citabilité" ? data.citabilite.score : data.audience.score;
+        var s = famille === "Potentiel de citation" ? data.potentiel.score : data.audience.score;
         hc += '<div class="fam"><span>'+esc(famille)+'</span><span class="fam-s">'+s+' / 100</span></div>';
       }
       hc += '<div class="sig"><div class="sig-head">'
@@ -746,7 +743,7 @@
     el("r-constats").innerHTML = hc;
 
     // malus
-    var m = data.citabilite.malus;
+    var m = data.potentiel.malus;
     if(m && m.liste && m.liste.length){
       var hm = '<div class="malus"><div class="malus-t">'+T.malusTitre+'</div>';
       m.liste.forEach(function(x){
@@ -754,8 +751,8 @@
             + '<span class="malus-pv">'+esc(x.preuve)+'</span>'
             + '<span class="malus-pt">- '+x.points+'</span></div>';
       });
-      hm += '<div class="malus-tot"><span>'+fmt(T.malusSousTotal,{b:data.citabilite.brut})+'</span>'
-          + '<span>- '+m.total+' = '+data.citabilite.score+' / 100</span></div></div>';
+      hm += '<div class="malus-tot"><span>'+fmt(T.malusSousTotal,{b:data.potentiel.brut})+'</span>'
+          + '<span>- '+m.total+' = '+data.potentiel.score+' / 100</span></div></div>';
       el("r-malus").innerHTML = hm;
     } else { el("r-malus").innerHTML = ""; }
 
@@ -784,18 +781,18 @@
 
   function robots(rb){
     if(!rb || !rb.dispo){ el("r-robots-intro").textContent = T.robotsIllisible; el("r-robots-list").innerHTML=""; return; }
-    var cible = document.getElementById("r-robots-list").offsetParent === null &&
-                !el("r-partiel").classList.contains("hidden") ? "-2" : "";
-    el("r-robots-intro" + cible).textContent = rb.nbBloques===0
+    el("r-robots-intro").textContent = rb.nbBloques===0
       ? fmt(T.robotsAucun,{n:rb.nbTotal}) : fmt(T.robotsBloques,{b:rb.nbBloques,n:rb.nbTotal});
     var h="";
     (rb.bots||[]).forEach(function(b){
       var e = (b.etat==="bloque"||b.etat==="partiel"||b.etat==="autorise") ? b.etat : "autorise";
+      var usage = b.usage === "recuperation" ? T.usageRecup : T.usageEntrain;
       h += '<div class="bot"><span class="bot-name">'+esc(b.nom)+'</span>'
          + '<span class="bot-org">'+esc(b.org)+'</span>'
+         + '<span class="bot-usage">'+usage+'</span>'
          + '<span class="bot-state '+e+'">'+T.etatsRobots[e]+'</span></div>';
     });
-    el("r-robots-list" + cible).innerHTML = h;
+    el("r-robots-list").innerHTML = h;
   }
 
   async function debloquer(){
@@ -809,7 +806,7 @@
           url: data.hostFinal || hostAnalyse,
           site: hostAnalyse,
           theme: el("theme").value || "",
-          scoreCitabilite: data.citabilite ? data.citabilite.score : "",
+          scoreCitabilite: data.potentiel ? data.potentiel.score : "",
           scoreAudience: data.audience ? data.audience.score : "",
           pagesLues: data.site_ ? data.site_.nbPages : 0,
           robotsBloques: (data.robots && data.robots.dispo) ? data.robots.nbBloques : "",
