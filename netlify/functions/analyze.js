@@ -108,6 +108,53 @@ function texteVisible(html) {
   ).replace(/\s+/g, " ").trim();
 }
 
+
+// --------- Isolement du corps de l'article ---------
+// Les menus, entetes et pieds de page faussent toutes les mesures : sur un grand
+// quotidien, la navigation represente plusieurs centaines de mots et des dizaines
+// de listes. On mesure donc uniquement le corps redactionnel.
+function corpsArticle(html) {
+  if (!html) return { corps: "", source: "vide" };
+
+  const sansBruit = function (t) {
+    return t
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+      .replace(/<header[\s\S]*?<\/header>/gi, " ")
+      .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+      .replace(/<aside[\s\S]*?<\/aside>/gi, " ")
+      .replace(/<form[\s\S]*?<\/form>/gi, " ");
+  };
+
+  // 1. La balise <article> la plus fournie
+  const articles = html.match(/<article[\s\S]*?<\/article>/gi) || [];
+  if (articles.length) {
+    const meilleur = articles.sort(function (a, b) { return b.length - a.length; })[0];
+    if (texteVisible(meilleur).split(/\s+/).length >= 80) {
+      return { corps: sansBruit(meilleur), source: "article" };
+    }
+  }
+
+  // 2. Un conteneur de corps de texte identifie par sa classe
+  const conteneurs = html.match(/<div[^>]+(class|id)=["'][^"']*(article-body|articleBody|post-content|entry-content|contenu-article|article__content|story-body|texte-article)[^"']*["'][\s\S]*?<\/div>/gi) || [];
+  if (conteneurs.length) {
+    const meilleur = conteneurs.sort(function (a, b) { return b.length - a.length; })[0];
+    if (texteVisible(meilleur).split(/\s+/).length >= 80) {
+      return { corps: sansBruit(meilleur), source: "conteneur" };
+    }
+  }
+
+  // 3. La balise <main>
+  const main = html.match(/<main[\s\S]*?<\/main>/i);
+  if (main && texteVisible(main[0]).split(/\s+/).length >= 80) {
+    return { corps: sansBruit(main[0]), source: "main" };
+  }
+
+  // 4. A defaut, le document expurge de sa navigation
+  return { corps: sansBruit(html), source: "page entiere" };
+}
+
 // Cherche des liens d'articles plausibles sur la page d'accueil.
 function trouverArticles(html, origin) {
   // Le mot exclu doit constituer un SEGMENT ENTIER du chemin.
@@ -156,21 +203,30 @@ function trouverArticles(html, origin) {
 // Une page de rubrique ou d'accueil fausse toutes les mesures : on l'ecarte.
 // Un article se reconnait a son balisage, ou a defaut a sa densite redactionnelle.
 function estUnArticle(m) {
+  // Contenu non servi : ni coquille technique, ni mur d'inscription.
+  if (m.coquille) return false;
+  if (m.mur && m.mots < 400) return false;
+
   // Le balisage reste le signal le plus sur.
-  if (m.schemaArticle) return true;
+  if (m.schemaArticle && m.mots >= 120) return true;
 
   // Sans balisage, il faut des marqueurs propres a un article et non a une rubrique :
   // une page de rubrique aligne des chapeaux courts, sans date ni signature,
   // et multiplie les intertitres qui sont en realite des titres d'articles.
-  const assezDeTexte = m.mots >= 400 && m.parasUtiles >= 6;
+  const assezDeTexte = m.mots >= 250 && m.parasUtiles >= 5;
   const marqueurArticle = m.dateVisible || m.auteurVisible;
-  const parasSubstantiels = m.paraMoyen >= 25;
+  const parasSubstantiels = m.paraMoyen >= 18;
   const pasUneListeDeTitres = m.titresTotal <= Math.max(6, m.parasUtiles / 2);
 
   return assezDeTexte && marqueurArticle && parasSubstantiels && pasUneListeDeTitres;
 }
 
-function analyserPage(html) {
+function analyserPage(htmlComplet) {
+  // Le balisage se lit sur le document entier (il est dans l'entete),
+  // le contenu editorial uniquement sur le corps de l'article.
+  const extrait = corpsArticle(htmlComplet);
+  const html = htmlComplet;
+  const corps = extrait.corps;
   const res = {
     schemaArticle: false, schemaAuteur: false, schemaDatePub: false, schemaDateMaj: false,
     auteurVisible: false, dateVisible: false,
@@ -178,6 +234,7 @@ function analyserPage(html) {
     listes: 0, tableaux: 0, schemaFAQ: false, titresTotal: 0, titresQuestion: 0,
     parasUtiles: 0, paraMoyen: 0, ouvertureDirecte: false, ouverture: "", ouvertureMots: 0,
     ouvertureChiffre: false, ouvertureRenvoi: false, passage: "", passageNote: 0,
+    sourceCorps: "", coquille: false, mur: false, dateMajVisible: false,
     schemaNews: false, pageAuteur: false, genreDeclare: false, citations: 0, sourcesPrimaires: 0,
     schemaAuteurTexte: false, noindex: false, nosnippet: false, maxSnippet: null, paywall: false,
     h1Unique: false, sautNiveau: false, sameAs: false, breadcrumb: false,
@@ -212,14 +269,21 @@ function analyserPage(html) {
   });
 
   if (/property=["']article:published_time["']/i.test(html)) res.dateVisible = true;
+  // Le Monde et beaucoup de titres affichent "modifie a 09h32" sans balisage dedie :
+  // on accepte le meta, le JSON-LD, la balise time et la mention visible.
   if (/property=["']article:modified_time["']/i.test(html)) res.schemaDateMaj = true;
+  if (/name=["'](last-?modified|date-?modified|revised)["']/i.test(html)) res.schemaDateMaj = true;
+  if (/<time[^>]+(datetime|itemprop=["']dateModified["'])[^>]*>/i.test(html)
+      && /(modifi|mis\s+\u00e0\s+jour|updated)/i.test(decodeEntites(html))) res.schemaDateMaj = true;
+  if (/modifi[e\u00e9]e?\s*(le|\u00e0|a)?\s*\d/i.test(decodeEntites(html))
+      || /mis\s+\u00e0\s+jour/i.test(decodeEntites(html))) res.dateMajVisible = true;
   if (/name=["']author["']/i.test(html) || /rel=["']author["']/i.test(html)) res.auteurVisible = true;
   if (/<time[\s>]/i.test(html)) res.dateVisible = true;
   if (/class=["'][^"']*(author|auteur|signature|byline)[^"']*["']/i.test(html)) res.auteurVisible = true;
 
   res.h1 = (html.match(/<h1[\s>]/gi) || []).length;
-  res.h2 = (html.match(/<h2[\s>]/gi) || []).length;
-  res.paragraphes = (html.match(/<p[\s>]/gi) || []).length;
+  res.h2 = (corps.match(/<h2[\s>]/gi) || []).length;
+  res.paragraphes = (corps.match(/<p[\s>]/gi) || []).length;
 
   // --- Signaux propres au metier de la presse ---
   // Ces elements ne sont pas regardes par les outils GEO generiques, alors qu'ils
@@ -229,7 +293,9 @@ function analyserPage(html) {
   res.schemaNews = /"@type"\s*:\s*("NewsArticle"|\[[^\]]*"NewsArticle")/i.test(html);
 
   // Signature reliee a une page auteur : c'est ce qui construit l'autorite journalistique.
-  res.pageAuteur = /<a[^>]+href=["'][^"']*\/(auteur|auteurs|author|authors|journaliste|redaction)\//i.test(html);
+  // Une page qui recense les articles d'un journaliste suffit : la biographie n'est pas exigee.
+  res.pageAuteur = /<a[^>]+href=["'][^"']*\/(auteur|auteurs|author|authors|journaliste|journalistes|signataire|signataires|redaction|contributeur)\//i.test(html)
+                || /"author"\s*:\s*\{[^}]*"url"\s*:/i.test(html);
 
   // Type d'article declare : reportage, enquete, analyse. Un signal d'expertise editoriale.
   res.genreDeclare = /"articleSection"\s*:|"genre"\s*:|"@type"\s*:\s*"(ReportageNewsArticle|AnalysisNewsArticle|OpinionNewsArticle|BackgroundNewsArticle)"/i.test(html);
@@ -237,12 +303,12 @@ function analyserPage(html) {
   // Citations sourcees : verbatim entre guillemets, marqueur du travail journalistique
   // et matiere premiere reprise par les moteurs.
   // Les guillemets francais sont souvent encodes en &laquo; : il faut decoder avant de chercher.
-  const texteCit = decodeEntites(html);
-  res.citations = (html.match(/<(blockquote|q)[\s>]/gi) || []).length
+  const texteCit = decodeEntites(corps);
+  res.citations = (corps.match(/<(blockquote|q)[\s>]/gi) || []).length
                 + ((texteCit.match(/«[^»]{25,400}»/g) || []).length);
 
   // Liens vers des sources primaires (institutions, etudes, textes officiels)
-  const liensSortants = (html.match(/<a\s[^>]*href=["']https?:\/\/[^"']+["']/gi) || []);
+  const liensSortants = (corps.match(/<a\s[^>]*href=["']https?:\/\/[^"']+["']/gi) || []);
   res.sourcesPrimaires = liensSortants.filter(function (l) {
     return /\.(gouv\.fr|europa\.eu|who\.int|oecd\.org|insee\.fr|banque-france\.fr|legifrance\.gouv\.fr|ademe\.fr|senat\.fr|assemblee-nationale\.fr)|\/(etude|rapport|communique)/i.test(l);
   }).length;
@@ -255,6 +321,11 @@ function analyserPage(html) {
   res.nosnippet = /nosnippet/.test(metaRobots) || /data-nosnippet/i.test(html);
   const mx = metaRobots.match(/max-snippet\s*:\s*(-?\d+)/);
   res.maxSnippet = mx ? parseInt(mx[1], 10) : null;   // -1 = illimite, 0 = aucun extrait
+
+  // Mur d'inscription ou d'abonnement : le corps de l'article n'est pas servi.
+  // Le noter comme un contenu faible serait faux : nous n'avons rien pu lire.
+  const texteMur = decodeEntites(corps).slice(0, 4000);
+  res.mur = /(cr[e\u00e9]ez\s+(un\s+)?compte|inscrivez-vous\s+pour|connectez-vous\s+pour|r[e\u00e9]serv[e\u00e9]\s+aux\s+abonn|poursuivre\s+votre\s+lecture|lire\s+la\s+suite\s+de\s+cet\s+article|d[e\u00e9]j[a\u00e0]\s+abonn[e\u00e9]|acc[e\u00e9]dez\s+[a\u00e0]\s+la\s+totalit)/i.test(texteMur);
 
   // Paywall declare dans les donnees structurees ou marqueurs courants
   res.paywall = /"isAccessibleForFree"\s*:\s*(false|"false")/i.test(html)
@@ -275,21 +346,21 @@ function analyserPage(html) {
   // --- Signaux d'extractibilite : ce qui permet a un AI Overview de reprendre un passage ---
 
   // Listes et tableaux : formats que les moteurs reprennent en priorite
-  res.listes = (html.match(/<ul[\s>]/gi) || []).length + (html.match(/<ol[\s>]/gi) || []).length;
-  res.tableaux = (html.match(/<table[\s>]/gi) || []).length;
+  res.listes = (corps.match(/<ul[\s>]/gi) || []).length + (corps.match(/<ol[\s>]/gi) || []).length;
+  res.tableaux = (corps.match(/<table[\s>]/gi) || []).length;
 
   // Balisage FAQ ou HowTo : concu pour la reponse directe
   res.schemaFAQ = /"@type"\s*:\s*"(FAQPage|HowTo|QAPage)"/i.test(html);
 
   // Sous-titres formules en question : structure question/reponse
-  const titres = (html.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/gi) || [])
+  const titres = (corps.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/gi) || [])
     .map(function (t) { return texteVisible(t); })
     .filter(function (t) { return t.length > 3; });
   res.titresTotal = titres.length;
   res.titresQuestion = titres.filter(function (t) { return t.indexOf("?") !== -1; }).length;
 
   // Paragraphes : longueur et extractibilite
-  const paras = (html.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || [])
+  const paras = (corps.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || [])
     .map(function (t) { return texteVisible(t); })
     .filter(function (t) { return t.split(/\s+/).length >= 8; });
 
@@ -334,8 +405,11 @@ function analyserPage(html) {
     }
   }
 
-  const texte = texteVisible(html);
+  const texte = texteVisible(corps);
   res.mots = texte ? texte.split(/\s+/).length : 0;
+  res.sourceCorps = extrait.source;
+  // Corps introuvable et texte residuel faible : le contenu est charge par le navigateur.
+  res.coquille = (extrait.source === "page entiere" && res.mots < 200);
   // Une seule expression, pour ne pas compter deux fois un pourcentage.
   res.chiffres = (texte.match(/\b\d[\d\s.,]*\s*(%|euros?|EUR|€|millions?|milliards?|ans?|km|kg|heures?|jours?|mois)\b/gi) || []).length;
 
@@ -351,24 +425,33 @@ function niveau(compte, total) {
   return "absent";
 }
 
-async function lireSite(origin) {
-  const rep = await getHTML(origin, 6000);
-  if (!rep) return { dispo: false, raison: "page d'accueil illisible" };
-  const accueil = rep.html;
+async function lireSite(origin, urlsSecours) {
+  const rep = await getHTML(origin, 5000);
 
+  // Accueil inaccessible : on se rabat sur les adresses du plan de site.
+  if (!rep) {
+    if (!urlsSecours || !urlsSecours.length) {
+      return { dispo: false, raison: "page d'accueil illisible" };
+    }
+  }
+
+  const accueil = rep ? rep.html : "";
   let originFinal = origin;
-  try { originFinal = new URL(rep.urlFinale).origin; } catch (e) {}
+  if (rep) { try { originFinal = new URL(rep.urlFinale).origin; } catch (e) {} }
 
-  const urls = trouverArticles(accueil, originFinal);
+  let urls = rep ? trouverArticles(accueil, originFinal) : [];
+  if (!urls.length && urlsSecours && urlsSecours.length) urls = urlsSecours.slice(0, 12);
   // En parallele : douze pages coutent le meme temps qu'une seule.
-  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 5000); }));
+  const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 4000); }));
 
-  let atteintes = 0;
+  let atteintes = 0, murs = 0, coquilles = 0;
   const candidates = [];
   reps.forEach(function (h, i) {
     if (!h) return;
     atteintes++;
     const mes = analyserPage(h.html);
+    if (mes.mur && mes.mots < 400) murs++;
+    if (mes.coquille) coquilles++;
     if (!estUnArticle(mes)) return;                  // rubrique, accueil, page de service
     candidates.push({ url: urls[i], mesures: mes, extrait: texteVisible(h.html).slice(0, 450) });
   });
@@ -381,15 +464,24 @@ async function lireSite(origin) {
   const pages = candidates.slice(0, 5);
 
   if (!pages.length) {
+    let motif = "aucune page article identifiee";
+    if (!atteintes) motif = "pages inaccessibles";
+    else if (murs >= Math.max(1, Math.round(atteintes / 2))) motif = "contenu reserve";
+    else if (coquilles >= Math.max(1, Math.round(atteintes / 2))) motif = "contenu charge par le navigateur";
     return {
       dispo: false,
-      raison: atteintes ? "aucune page article identifiee" : "pages inaccessibles",
+      raison: motif,
+      nbMurs: murs,
+      nbCoquilles: coquilles,
       nbPages: 0, nbTentees: urls.length, nbAtteintes: atteintes, originFinal: originFinal,
     };
   }
 
   // Les signaux d'audience propre se trouvent surtout dans l'entete et le pied de page.
-  const audience = analyserAudience(accueil + " " + (reps.find(function (x) { return x; }) || { html: "" }).html);
+  // Entete et pied de page figurent aussi sur les articles : sans accueil, on les y lit.
+  const pourAudience = (accueil ? accueil + " " : "")
+    + reps.filter(function (x) { return x; }).slice(0, 2).map(function (x) { return x.html; }).join(" ");
+  const audience = analyserAudience(pourAudience);
 
   const n = pages.length;
   const agg = pages.reduce(function (a, p) {
@@ -398,6 +490,7 @@ async function lireSite(origin) {
     a.schemaAuteur += m.schemaAuteur ? 1 : 0;
     a.schemaDatePub += m.schemaDatePub ? 1 : 0;
     a.schemaDateMaj += m.schemaDateMaj ? 1 : 0;
+    a.dateMajVisible += m.dateMajVisible ? 1 : 0;
     a.auteurVisible += m.auteurVisible ? 1 : 0;
     a.dateVisible += m.dateVisible ? 1 : 0;
     a.mots += m.mots; a.chiffres += m.chiffres; a.h2 += m.h2; a.paragraphes += m.paragraphes;
@@ -427,7 +520,7 @@ async function lireSite(origin) {
     }
     return a;
   }, { schemaArticle:0, schemaAuteur:0, schemaDatePub:0, schemaDateMaj:0, auteurVisible:0,
-       dateVisible:0, mots:0, chiffres:0, h2:0, paragraphes:0,
+       dateVisible:0, dateMajVisible:0, mots:0, chiffres:0, h2:0, paragraphes:0,
        listes:0, tableaux:0, schemaFAQ:0, titresTotal:0, titresQuestion:0,
        ouvertureDirecte:0, paraSomme:0, paraCount:0, meilleureNote:0, passage:"",
        noindex:0, nosnippet:0, snippetZero:0, paywall:0, h1Unique:0, sautNiveau:0,
@@ -439,6 +532,7 @@ async function lireSite(origin) {
     dispo: true,
     nbPages: n,
     nbTentees: urls.length,
+    viaPlanDeSite: !rep,
     nbAtteintes: atteintes,
     nbBalisees: pages.filter(function (x) { return x.mesures.schemaArticle; }).length,
     originFinal: originFinal,
@@ -449,7 +543,7 @@ async function lireSite(origin) {
     balisageArticle: niveau(agg.schemaArticle, n),
     auteurBalise: niveau(agg.schemaAuteur, n),
     datePubliee: (agg.schemaDatePub > 0 || agg.dateVisible > 0) ? "present" : "absent",
-    dateMaj: agg.schemaDateMaj > 0 ? "present" : "absent",
+    dateMaj: agg.schemaDateMaj > 0 ? "present" : (agg.dateMajVisible > 0 ? "partiel" : "absent"),
     auteurAffiche: agg.auteurVisible > 0 ? "present" : "absent",
     motsMoyen: Math.round(agg.mots / n),
     chiffresMoyen: Math.round((agg.chiffres / n) * 10) / 10,
@@ -492,6 +586,78 @@ async function lireSite(origin) {
 
 
 
+
+
+// --------- Plan de site : voie de secours quand l'accueil est inaccessible ---------
+// Les protections anti-robots visent surtout la page d'accueil. Le plan de site
+// reste souvent servi, et il liste les articles recents.
+
+async function getXML(u, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(function () { ctrl.abort(); }, ms || 4000);
+  try {
+    const r = await fetch(u, { signal: ctrl.signal, redirect: "follow", headers: UA_NAVIGATEUR });
+    clearTimeout(timer);
+    if (!r.ok) return null;
+    const t = await r.text();
+    return t.slice(0, 400000);
+  } catch (e) {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+function urlsDuPlan(xml, origin) {
+  if (!xml) return [];
+  return (xml.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || [])
+    .map(function (m) { return m.replace(/<\/?loc>/gi, "").trim(); })
+    .filter(function (u) { return u.indexOf(origin) === 0; });
+}
+
+// Retient les adresses qui ressemblent a des articles, les plus recentes d'abord.
+function articlesDeXml(xml, origin) {
+  if (!xml) return [];
+  if (/<sitemapindex/i.test(xml)) return [];   // index de plans : traite plus bas
+  return urlsDuPlan(xml, origin)
+    .filter(function (u) {
+      const chemin = u.slice(origin.length);
+      return chemin.length >= 12 && (/-/.test(chemin) || /\d{4,}/.test(chemin));
+    })
+    .slice(-12).reverse();
+}
+
+// Cherche les plans de site declares dans le robots.txt, puis les emplacements usuels.
+async function articlesDuPlanDeSite(origin, robotsTxt) {
+  const candidats = [];
+  if (robotsTxt) {
+    (robotsTxt.match(/^\s*sitemap\s*:\s*(\S+)/gim) || []).forEach(function (l) {
+      const u = l.split(/:\s*/).slice(1).join(":").trim();
+      if (u.indexOf(origin) === 0) candidats.push(u);
+    });
+  }
+  ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml", "/sitemap-news.xml"]
+    .forEach(function (c) { if (candidats.indexOf(origin + c) === -1) candidats.push(origin + c); });
+
+  for (let i = 0; i < Math.min(candidats.length, 2); i++) {
+    const xml = await getXML(candidats[i], 3000);
+    if (!xml) continue;
+    let urls = urlsDuPlan(xml, origin);
+    if (!urls.length) continue;
+
+    // Si c'est un index de plans, on ouvre le plus recent.
+    if (/<sitemapindex/i.test(xml)) {
+      const sous = await getXML(urls[urls.length - 1], 3000);
+      urls = urlsDuPlan(sous, origin);
+    }
+    // On garde les adresses qui ressemblent a des articles, les plus recentes d'abord.
+    const articles = urls.filter(function (u) {
+      const chemin = u.slice(origin.length);
+      return chemin.length >= 12 && (/-/.test(chemin) || /\d{4,}/.test(chemin));
+    });
+    if (articles.length) return articles.slice(-12).reverse();
+  }
+  return [];
+}
 
 // --------- Mesure de l'independance vis-a-vis des plateformes ---------
 // Ce que le media possede en propre : capture d'audience, compte, abonnement.
@@ -586,19 +752,19 @@ function parseRobots(txt) {
 }
 
 function botStatus(groups, ua) {
-  const key = ua.toLowerCase();
-  const explicit = Object.prototype.hasOwnProperty.call(groups, key);
-  const rules = explicit ? groups[key] : groups["*"];
-  if (!rules) return { etat: "autorise", source: "aucune regle" };
-  const blockedAll = rules.disallow.some(function (d) { return d === "/"; });
-  const allowedAll = rules.allow.some(function (a) { return a === "/"; });
-  if (blockedAll && !allowedAll) {
-    return { etat: "bloque", source: explicit ? "regle explicite" : "regle generale" };
-  }
-  if (rules.disallow.some(function (d) { return d && d !== "/"; })) {
-    return { etat: "partiel", source: explicit ? "regle explicite" : "regle generale" };
-  }
-  return { etat: "autorise", source: explicit ? "regle explicite" : "regle generale" };
+  const cle = ua.toLowerCase();
+  const explicite = Object.prototype.hasOwnProperty.call(groups, cle);
+  const regles = explicite ? groups[cle] : groups["*"];
+  if (!regles) return { etat: "autorise", restreint: false };
+
+  const toutBloque = regles.disallow.some(function (d) { return d === "/"; });
+  const toutAutorise = regles.allow.some(function (a) { return a === "/"; });
+  if (toutBloque && !toutAutorise) return { etat: "bloque", restreint: false, explicite: explicite };
+
+  // Des interdictions de chemins particuliers (rubriques privees, recherche) ne
+  // remettent pas en cause l'acces aux articles : le robot reste autorise.
+  const restreint = regles.disallow.some(function (d) { return d && d !== "/"; });
+  return { etat: "autorise", restreint: restreint, explicite: explicite };
 }
 
 async function readRobots(siteUrl) {
@@ -619,9 +785,10 @@ async function readRobots(siteUrl) {
     if (!/user-agent/i.test(txt)) return { dispo: false, joignable: true, raison: "robots.txt vide ou non standard" };
 
     const groups = parseRobots(txt);
+    const brutRobots = txt;
     const bots = AI_BOTS.map(function (b) {
       const st = botStatus(groups, b.ua);
-      return { nom: b.label, org: b.org, usage: b.usage, etat: st.etat, source: st.source };
+      return { nom: b.label, org: b.org, usage: b.usage, etat: st.etat, restreint: !!st.restreint };
     });
     const bloques = bots.filter(function (b) { return b.etat === "bloque"; });
 
@@ -643,6 +810,7 @@ async function readRobots(siteUrl) {
       nbTotal: bots.length,
       listeBloques: bloques.map(function (b) { return b.nom; }),
       // Ventilation par usage : seuls les robots de recuperation conditionnent la citation.
+      texte: brutRobots.slice(0, 20000),
       recupTotal: recup.length,
       recupBloques: recupBloques.length,
       recupListeBloques: recupBloques.map(function (b) { return b.nom; }),
@@ -760,25 +928,25 @@ const TEXTES = {
     },
   },
 
-  // --- Synthèse : assemblée par règles, selon les niveaux mesurés ---
+  // --- Synthèse : phrases courtes, assemblées à partir des mesures ---
   synthese: {
-    expo: {
-      haut: "Vos articles réunissent la plupart des conditions techniques et éditoriales qui permettent aux moteurs de réponse de les citer comme source.",
-      moyen: "Vos articles réunissent une partie des conditions permettant aux moteurs de réponse de les citer, avec plusieurs points bloquants identifiés.",
-      bas: "Vos articles réunissent peu des conditions permettant aux moteurs de réponse de les citer comme source.",
+    ouverture: {
+      haut: "Vos articles remplissent l'essentiel des conditions techniques permettant à un moteur de réponse de les citer.",
+      moyen: "Vos articles remplissent une partie des conditions permettant à un moteur de réponse de les citer.",
+      bas: "Vos articles remplissent peu des conditions permettant à un moteur de réponse de les citer.",
     },
-    indep: {
-      haut: "Vous disposez déjà des canaux qui vous permettent de joindre vos lecteurs sans intermédiaire.",
-      moyen: "Vous disposez d'une partie des canaux permettant de joindre vos lecteurs directement, mais des maillons manquent.",
-      bas: "Vous disposez de peu de moyens pour joindre vos lecteurs sans passer par une plateforme.",
+    frein: "Le principal point à corriger est {frein}.",
+    blocage: "Un élément bloque la reprise de vos contenus quelle que soit leur qualité : {motif}.",
+    audience: {
+      haut: "Vous disposez en revanche des canaux nécessaires pour joindre vos lecteurs directement : {liste}.",
+      moyen: "Côté canaux directs, vous disposez de {liste}, mais il manque {manque}.",
+      bas: "Vous n'avez presque aucun moyen de joindre vos lecteurs sans passer par une plateforme : il manque {manque}.",
     },
-    croise: {
-      exposeSansFilet: "Votre visibilité repose donc largement sur des plateformes dont vous ne maîtrisez ni les règles ni le calendrier, sans canal propre pour retenir les lecteurs qu'elles vous envoient.",
-      exposeAvecFilet: "Vos canaux propres constituent un amortisseur : les lecteurs captés par la recherche peuvent être convertis en audience adressable.",
-      solideSansFilet: "Vos contenus sont bien positionnés pour être cités, mais l'audience ainsi gagnée repart sans laisser de trace exploitable.",
-      solideAvecFilet: "Vous combinez une bonne citabilité et des canaux propres, ce qui vous place en position de convertir cette visibilité en relation durable.",
+    conclusion: {
+      risque: "Une baisse de visibilité sur les moteurs se traduirait donc directement par une perte d'audience, sans relais pour la retenir.",
+      amorti: "Une baisse de visibilité sur les moteurs serait donc partiellement absorbée par vos canaux directs.",
+      solide: "Votre exposition aux moteurs est correcte et vos canaux directs vous permettent de convertir cette audience.",
     },
-    blocage: "Un blocage technique empêche actuellement la reprise de vos contenus, indépendamment de leur qualité.",
   },
 
   // --- Recommandations sur l'audience propre, selon ce qui manque ---
@@ -788,6 +956,7 @@ const TEXTES = {
     collecte: "Installer des points de collecte d'adresses dans le parcours de lecture, avec une promesse éditoriale claire.",
     abonnement: "Rendre l'offre d'abonnement visible depuis les articles et travailler les étapes du tunnel.",
     push: "Ouvrir un canal de notification directe, piloté par thématique.",
+    application: "Évaluer l'intérêt d'une application au regard de votre volume de lecteurs récurrents et de votre offre d'abonnement.",
     consolider: "Exploiter les canaux propres déjà en place : segmentation, scénarios de réengagement, passage du lecteur inscrit à l'abonné.",
   },
 };
@@ -818,7 +987,7 @@ function etatCritere(obtenu, max) {
 }
 
 // --- Score 1 : citabilité par les moteurs de réponse ---
-function scoreCitabilite(m, robots) {
+function scorePotentiel(m, robots) {
   const d = [];
 
   let ptsRobots = 0, constatRobots;
@@ -917,18 +1086,51 @@ function niveauScore(s) { return s >= 70 ? "haut" : (s >= 45 ? "moyen" : "bas");
 
 function construireSynthese(citab, audience, malus) {
   const nE = niveauScore(citab.score);
-  const nI = niveauScore(audience.score);
+  const nA = niveauScore(audience.score);
   const p = [];
 
-  p.push(TEXTES.synthese.expo[nE]);
-  if (malus.total > 0) p.push(TEXTES.synthese.blocage);
-  p.push(TEXTES.synthese.indep[nI]);
+  p.push(TEXTES.synthese.ouverture[nE]);
 
-  if (nE === "bas" || nE === "moyen") {
-    p.push(nI === "bas" ? TEXTES.synthese.croise.exposeSansFilet : TEXTES.synthese.croise.exposeAvecFilet);
-  } else {
-    p.push(nI === "bas" ? TEXTES.synthese.croise.solideSansFilet : TEXTES.synthese.croise.solideAvecFilet);
+  // Le frein principal est nommé, pas résumé en généralités.
+  const faibles = citab.detail
+    .filter(function (x) { return etatCritere(x.obtenu, x.max) !== "fort"; })
+    .sort(function (a, b) { return (b.max - b.obtenu) - (a.max - a.obtenu); });
+  if (faibles.length) {
+    p.push(TEXTES.synthese.frein.replace("{frein}",
+      TEXTES.criteres[faibles[0].cle].nom.toLowerCase()));
   }
+
+  if (malus.total > 0 && malus.liste.length) {
+    p.push(TEXTES.synthese.blocage.replace("{motif}", malus.liste[0].libelle.toLowerCase()));
+  }
+
+  // Ce qui est en place et ce qui manque, nommément.
+  const enPlace = audience.detail.filter(function (x) { return x.obtenu > 0; })
+    .map(function (x) { return TEXTES.criteres[x.cle].nom.toLowerCase(); });
+  const manquant = audience.detail.filter(function (x) { return x.obtenu === 0; })
+    .sort(function (a, b) { return b.max - a.max; })
+    .map(function (x) { return TEXTES.criteres[x.cle].nom.toLowerCase(); });
+
+  const liste = function (t) {
+    if (!t.length) return "";
+    if (t.length === 1) return t[0];
+    return t.slice(0, -1).join(", ") + " et " + t[t.length - 1];
+  };
+
+  if (nA === "haut") {
+    p.push(TEXTES.synthese.audience.haut.replace("{liste}", liste(enPlace.slice(0, 3))));
+  } else if (nA === "moyen") {
+    p.push(TEXTES.synthese.audience.moyen
+      .replace("{liste}", liste(enPlace.slice(0, 2)))
+      .replace("{manque}", liste(manquant.slice(0, 2))));
+  } else {
+    p.push(TEXTES.synthese.audience.bas.replace("{manque}", liste(manquant.slice(0, 3))));
+  }
+
+  if (nE === "haut" && nA !== "bas") p.push(TEXTES.synthese.conclusion.solide);
+  else if (nA === "bas") p.push(TEXTES.synthese.conclusion.risque);
+  else p.push(TEXTES.synthese.conclusion.amorti);
+
   return p.join(" ");
 }
 
@@ -942,7 +1144,7 @@ function construireRecos(citab, audience) {
     .slice(0, 4)
     .forEach(function (x) {
       const t = TEXTES.criteres[x.cle];
-      recos.push({ titre: t.nom, action: t.action, perdus: x.max - x.obtenu, famille: "Citabilité" });
+      recos.push({ titre: t.nom, action: t.action, perdus: x.max - x.obtenu, famille: "Potentiel de citation" });
     });
 
   const manque = audience.detail.filter(function (x) { return x.obtenu === 0; })
@@ -1082,8 +1284,23 @@ exports.handler = async function (event) {
     return json(400, { error: "Adresse incomplète. Indiquez le domaine avec son extension, par exemple economist.com" });
   }
 
-  // Mesures réelles, en parallèle pour tenir dans le temps imparti.
-  const [robots, site] = await Promise.all([readRobots(url), lireSite(origin)]);
+  // Tout est lancé en parallèle : robots.txt, page d'accueil et plan de site.
+  // Le plan de site ne sert que si l'accueil est bloqué, mais le demander d'emblée
+  // évite d'ajouter son délai à celui de l'accueil.
+  let [robots, site, planXml] = await Promise.all([
+    readRobots(url),
+    lireSite(origin),
+    getXML(origin + "/sitemap.xml", 3500),
+  ]);
+
+  // Accueil inaccessible : on reconstitue l'échantillon depuis le plan de site.
+  if (!site.dispo && site.raison === "page d'accueil illisible") {
+    let secours = articlesDeXml(planXml, origin);
+    if (!secours.length) {
+      secours = await articlesDuPlanDeSite(origin, robots && robots.texte);
+    }
+    if (secours.length) site = await lireSite(origin, secours);
+  }
 
   if (robots.joignable === false && !site.dispo) {
     return json(400, { error: "Ce domaine est introuvable. Vérifiez l'adresse saisie." });
@@ -1104,7 +1321,7 @@ exports.handler = async function (event) {
     });
   }
 
-  const citab = scoreCitabilite(site, robots);
+  const citab = scorePotentiel(site, robots);
   const malus = calculMalus(site, robots);
   citab.brut = citab.score;
   citab.malus = malus;
@@ -1119,9 +1336,9 @@ exports.handler = async function (event) {
     redirige: redirige,
     theme: theme,
     synthese: construireSynthese(citab, audience, malus),
-    citabilite: { score: citab.score, brut: citab.brut, malus: citab.malus, detail: citab.detail },
+    potentiel: { score: citab.score, brut: citab.brut, malus: citab.malus, detail: citab.detail },
     audience: { score: audience.score, detail: audience.detail, reseaux: (site.audience || {}).reseaux || 0 },
-    constats: construireConstats(citab, "Citabilité").concat(construireConstats(audience, "Audience en propre")),
+    constats: construireConstats(citab, "Potentiel de citation").concat(construireConstats(audience, "Audience en propre")),
     recos: construireRecos(citab, audience),
     ouverture: {
       texte: site.ouverture || "",
