@@ -834,6 +834,11 @@ async function readRobots(siteUrl) {
 
 
 
+// Version de la fonction. Elle s'affiche en bas du rapport et se consulte
+// directement dans un navigateur, ce qui permet de verifier ce qui tourne
+// reellement en ligne.
+const VERSION = "2026-08-22 / v6 : extrait payant analyse, corps d'article isole";
+
 // ============================================================
 //  TEXTES DU RAPPORT
 //  Toutes les phrases affichées sont écrites ici. Aucune n'est
@@ -1265,12 +1270,16 @@ async function genererReecritures(extraits) {
 // ============================================================
 
 exports.handler = async function (event) {
-  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
-
   const json = function (code, obj) {
     return { statusCode: code, headers: { "content-type": "application/json; charset=utf-8" },
              body: JSON.stringify(obj) };
   };
+
+  // Une visite directe dans le navigateur affiche la version deployee.
+  if (event.httpMethod === "GET") {
+    return json(200, { version: VERSION });
+  }
+  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
   JOURNAL.length = 0;
 
@@ -1325,6 +1334,7 @@ exports.handler = async function (event) {
       journal: JOURNAL.slice(0, 6),
       robots: robots,
       site_: site,
+      version: VERSION,
     });
   }
 
@@ -1357,5 +1367,6 @@ exports.handler = async function (event) {
     reecritures: reecritures,
     robots: robots,
     site_: site,
+    version: VERSION,
   });
 };
