@@ -30,10 +30,33 @@ const UA_READR = {
   "accept-language": "fr-FR,fr;q=0.9",
 };
 const UA_NAVIGATEUR = {
-  "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
-  "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "accept-language": "fr-FR,fr;q=0.9",
+  "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+  "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
+  "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"139\"",
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "none",
+  "sec-fetch-user": "?1",
+  "upgrade-insecure-requests": "1",
 };
+
+// --------- Repli optionnel par proxy a IP residentielle (dormant sans cle) ---------
+// Les protections type DataDome (liberation.fr, lemonde.fr) rejettent toute requete
+// venant d'une IP de datacenter, celle de Netlify comprise : ni les en-tetes ni le
+// plan de site n'y changent rien, le refus est un HTTP 403 avant toute lecture. Le
+// seul contournement fiable est de router la lecture par un service a IP residentielle.
+// Renseigner SCRAPER_KEY dans les variables Netlify active ce repli. Sans cle, le
+// comportement est identique a aujourd'hui, aucun credit n'est consomme. Adapter
+// l'URL au fournisseur retenu : ici ScrapingBee, render_js desactive pour le cout.
+function viaProxy(u) {
+  const cle = process.env.SCRAPER_KEY;
+  if (!cle) return u;
+  return "https://app.scrapingbee.com/api/v1/?api_key=" + cle
+       + "&render_js=false&url=" + encodeURIComponent(u);
+}
 
 // Journal des echecs, remonte au rapport pour rendre toute panne explicable.
 const JOURNAL = [];
@@ -42,7 +65,8 @@ async function tenter(u, ms, entetes) {
   const ctrl = new AbortController();
   const timer = setTimeout(function () { ctrl.abort(); }, ms);
   try {
-    const r = await fetch(u, { signal: ctrl.signal, redirect: "follow", headers: entetes });
+    const cible = viaProxy(u);
+    const r = await fetch(cible, { signal: ctrl.signal, redirect: "follow", headers: entetes });
     clearTimeout(timer);
     if (!r.ok) return { ok: false, motif: "HTTP " + r.status };
     const ct = r.headers.get("content-type") || "";
@@ -50,7 +74,9 @@ async function tenter(u, ms, entetes) {
     const brut = await r.text();
     // On conserve le debut et la fin : le pied de page porte les liens utiles.
     const txt = brut.length > 900000 ? brut.slice(0, 600000) + " " + brut.slice(-300000) : brut;
-    return { ok: true, html: txt, urlFinale: r.url || u, xRobots: r.headers.get("x-robots-tag") || "" };
+    // Sous proxy, r.url pointe le service : on conserve l'adresse demandee comme finale.
+    const urlFinale = cible === u ? (r.url || u) : u;
+    return { ok: true, html: txt, urlFinale: urlFinale, xRobots: r.headers.get("x-robots-tag") || "" };
   } catch (e) {
     clearTimeout(timer);
     const code = (e && e.cause && e.cause.code) || (e.name === "AbortError" ? "delai depasse" : "erreur reseau");
@@ -440,8 +466,12 @@ async function lireSite(origin, urlsSecours) {
   let originFinal = origin;
   if (rep) { try { originFinal = new URL(rep.urlFinale).origin; } catch (e) {} }
 
-  let urls = rep ? trouverArticles(accueil, originFinal) : [];
-  if (!urls.length && urlsSecours && urlsSecours.length) urls = urlsSecours.slice(0, 12);
+  // Le plan de site, quand il est fourni, prime : il liste de vrais articles, la ou
+  // une page d'accueil rendue en JavaScript ne livre souvent que des liens de rubrique.
+  // La page d'accueil reste lue par ailleurs, pour les signaux d'audience en propre.
+  let urls = (urlsSecours && urlsSecours.length)
+    ? urlsSecours.slice(0, 12)
+    : (rep ? trouverArticles(accueil, originFinal) : []);
   // En parallele : douze pages coutent le meme temps qu'une seule.
   const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 4000); }));
 
@@ -600,7 +630,7 @@ async function getXML(u, ms) {
   const ctrl = new AbortController();
   const timer = setTimeout(function () { ctrl.abort(); }, ms || 4000);
   try {
-    const r = await fetch(u, { signal: ctrl.signal, redirect: "follow", headers: UA_NAVIGATEUR });
+    const r = await fetch(viaProxy(u), { signal: ctrl.signal, redirect: "follow", headers: UA_NAVIGATEUR });
     clearTimeout(timer);
     if (!r.ok) return null;
     const t = await r.text();
@@ -837,7 +867,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-08-22 / v6 : extrait payant analyse, corps d'article isole";
+const VERSION = "2026-08-24 / v7 : plan de site prioritaire, repli elargi, en-tetes navigateur, hook proxy";
 
 // ============================================================
 //  TEXTES DU RAPPORT
@@ -1309,13 +1339,19 @@ exports.handler = async function (event) {
     getXML(origin + "/sitemap.xml", 3500),
   ]);
 
-  // Accueil inaccessible : on reconstitue l'échantillon depuis le plan de site.
-  if (!site.dispo && site.raison === "page d'accueil illisible") {
+  // Repli par le plan de site des que la lecture directe echoue, quelle qu'en soit la
+  // cause. Le cas frequent des grands quotidiens n'est pas un accueil illisible mais un
+  // accueil lisible sans article exploitable (liens de rubrique, corps charge en
+  // JavaScript, ex. lefigaro.fr) : le plan de site donne alors de vraies adresses d'articles.
+  if (!site.dispo) {
     let secours = articlesDeXml(planXml, origin);
     if (!secours.length) {
       secours = await articlesDuPlanDeSite(origin, robots && robots.texte);
     }
-    if (secours.length) site = await lireSite(origin, secours);
+    if (secours.length) {
+      const via = await lireSite(origin, secours);
+      if (via.dispo) site = via;   // on ne remplace que si le plan de site a permis de mesurer
+    }
   }
 
   if (robots.joignable === false && !site.dispo) {
