@@ -270,6 +270,7 @@
   .syn-meta{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line);
     font-size:12.5px; color:var(--muted); }
 
+  .version-note{ margin-top:26px; font-size:11px; color:#B0B0B0; }
   .impression-pied{ display:none; }
   @media print { .impression-pied{ display:block; margin-top:22px; padding-top:12px;
     border-top:1px solid var(--line); font-size:11px; color:var(--muted); } }
@@ -518,6 +519,8 @@
     <button id="restart-btn" class="again noprint">Analyser un autre média</button>
   </section>
 
+  <div class="version-note" id="r-version"></div>
+
   <div class="impression-pied">
     Diagnostic de visibilité IA réalisé par Readr, agence indépendante acquisition, crm et data.
     readr.agency
@@ -655,6 +658,7 @@
   }
 
   function afficher(){
+    el("r-version").textContent = data.version ? ("Version de l'outil : " + data.version) : "";
     el("r-host").textContent = data.hostFinal ? data.hostFinal.replace(/^www\./i,"") : hostAnalyse;
     el("r-redir").innerHTML = data.redirige ? (T.redirection + " <b>" + esc(hostAnalyse) + "</b>") : "";
 
