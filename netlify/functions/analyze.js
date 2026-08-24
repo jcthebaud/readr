@@ -203,12 +203,13 @@ function trouverArticles(html, origin) {
 // Une page de rubrique ou d'accueil fausse toutes les mesures : on l'ecarte.
 // Un article se reconnait a son balisage, ou a defaut a sa densite redactionnelle.
 function estUnArticle(m) {
-  // Contenu non servi : ni coquille technique, ni mur d'inscription.
-  if (m.coquille) return false;
-  if (m.mur && m.mots < 400) return false;
+  // Un article payant reste un article : son balisage, sa signature, ses dates et
+  // sa structure sont mesurables sur l'extrait visible. On ne l'ecarte que si la
+  // page ne contient reellement aucun texte exploitable.
+  if (m.mots < 60) return false;
 
   // Le balisage reste le signal le plus sur.
-  if (m.schemaArticle && m.mots >= 120) return true;
+  if (m.schemaArticle) return true;
 
   // Sans balisage, il faut des marqueurs propres a un article et non a une rubrique :
   // une page de rubrique aligne des chapeaux courts, sans date ni signature,
@@ -325,7 +326,7 @@ function analyserPage(htmlComplet) {
   // Mur d'inscription ou d'abonnement : le corps de l'article n'est pas servi.
   // Le noter comme un contenu faible serait faux : nous n'avons rien pu lire.
   const texteMur = decodeEntites(corps).slice(0, 4000);
-  res.mur = /(cr[e\u00e9]ez\s+(un\s+)?compte|inscrivez-vous\s+pour|connectez-vous\s+pour|r[e\u00e9]serv[e\u00e9]\s+aux\s+abonn|poursuivre\s+votre\s+lecture|lire\s+la\s+suite\s+de\s+cet\s+article|d[e\u00e9]j[a\u00e0]\s+abonn[e\u00e9]|acc[e\u00e9]dez\s+[a\u00e0]\s+la\s+totalit)/i.test(texteMur);
+  res.mur = /(cr[e\u00e9]ez\s+(un\s+)?compte|inscrivez-vous\s+pour|connectez-vous\s+pour|r[e\u00e9]serv[e\u00e9]\s+aux\s+abonn|poursuivre\s+votre\s+lecture|lire\s+la\s+suite\s+de\s+cet\s+article|d[e\u00e9]j[a\u00e0]\s+abonn[e\u00e9]|acc[e\u00e9]dez\s+[a\u00e0]\s+la\s+totalit|subscribe\s+to\s+(continue|read)|already\s+a\s+subscriber|sign\s+in\s+to\s+read|create\s+an\s+account\s+to)/i.test(texteMur);
 
   // Paywall declare dans les donnees structurees ou marqueurs courants
   res.paywall = /"isAccessibleForFree"\s*:\s*(false|"false")/i.test(html)
@@ -409,7 +410,7 @@ function analyserPage(htmlComplet) {
   res.mots = texte ? texte.split(/\s+/).length : 0;
   res.sourceCorps = extrait.source;
   // Corps introuvable et texte residuel faible : le contenu est charge par le navigateur.
-  res.coquille = (extrait.source === "page entiere" && res.mots < 200);
+  res.coquille = (res.mots < 80);
   // Une seule expression, pour ne pas compter deux fois un pourcentage.
   res.chiffres = (texte.match(/\b\d[\d\s.,]*\s*(%|euros?|EUR|€|millions?|milliards?|ans?|km|kg|heures?|jours?|mois)\b/gi) || []).length;
 
@@ -462,6 +463,7 @@ async function lireSite(origin, urlsSecours) {
     return b.mesures.mots - a.mesures.mots;
   });
   const pages = candidates.slice(0, 5);
+  const pagesMurees = pages.filter(function (x) { return x.mesures.mur; }).length;
 
   if (!pages.length) {
     let motif = "aucune page article identifiee";
@@ -535,6 +537,8 @@ async function lireSite(origin, urlsSecours) {
     viaPlanDeSite: !rep,
     nbAtteintes: atteintes,
     nbBalisees: pages.filter(function (x) { return x.mesures.schemaArticle; }).length,
+    nbMurees: pagesMurees,
+    contenuPartiel: pagesMurees >= Math.max(1, Math.round(pages.length / 2)),
     originFinal: originFinal,
     urls: pages.map(function (p) { return p.url; }),
     extraits: pages.map(function (p) { return p.extrait; }),
@@ -942,6 +946,7 @@ const TEXTES = {
       moyen: "Côté canaux directs, vous disposez de {liste}, mais il manque {manque}.",
       bas: "Vous n'avez presque aucun moyen de joindre vos lecteurs sans passer par une plateforme : il manque {manque}.",
     },
+    contenuPartiel: "Vos articles étant réservés aux abonnés, nous n'avons lu que l'extrait accessible : les mesures de longueur et de densité portent sur cette partie visible, celle que voient aussi les moteurs de réponse.",
     conclusion: {
       risque: "Une baisse de visibilité sur les moteurs se traduirait donc directement par une perte d'audience, sans relais pour la retenir.",
       amorti: "Une baisse de visibilité sur les moteurs serait donc partiellement absorbée par vos canaux directs.",
@@ -1084,7 +1089,7 @@ function calculMalus(m, robots) {
 
 function niveauScore(s) { return s >= 70 ? "haut" : (s >= 45 ? "moyen" : "bas"); }
 
-function construireSynthese(citab, audience, malus) {
+function construireSynthese(citab, audience, malus, contenuPartiel) {
   const nE = niveauScore(citab.score);
   const nA = niveauScore(audience.score);
   const p = [];
@@ -1126,6 +1131,8 @@ function construireSynthese(citab, audience, malus) {
   } else {
     p.push(TEXTES.synthese.audience.bas.replace("{manque}", liste(manquant.slice(0, 3))));
   }
+
+  if (contenuPartiel) p.push(TEXTES.synthese.contenuPartiel);
 
   if (nE === "haut" && nA !== "bas") p.push(TEXTES.synthese.conclusion.solide);
   else if (nA === "bas") p.push(TEXTES.synthese.conclusion.risque);
@@ -1335,7 +1342,7 @@ exports.handler = async function (event) {
     hostFinal: hostFinal,
     redirige: redirige,
     theme: theme,
-    synthese: construireSynthese(citab, audience, malus),
+    synthese: construireSynthese(citab, audience, malus, site.contenuPartiel),
     potentiel: { score: citab.score, brut: citab.brut, malus: citab.malus, detail: citab.detail },
     audience: { score: audience.score, detail: audience.detail, reseaux: (site.audience || {}).reseaux || 0 },
     constats: construireConstats(citab, "Potentiel de citation").concat(construireConstats(audience, "Audience en propre")),
