@@ -884,7 +884,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-08-24 / v8 : audience coherente (paywall implique abonnement, newsletter implique collecte), detection elargie";
+const VERSION = "2026-08-24 / v9 : synthese redigee (formes articulees des criteres), audience coherente, detection elargie";
 
 // ============================================================
 //  TEXTES DU RAPPORT
@@ -991,12 +991,32 @@ const TEXTES = {
       moyen: "Vos articles remplissent une partie des conditions permettant à un moteur de réponse de les citer.",
       bas: "Vos articles remplissent peu des conditions permettant à un moteur de réponse de les citer.",
     },
-    frein: "Le principal point à corriger est {frein}.",
+    frein: "Le principal point à corriger porte sur {frein}.",
     blocage: "Un élément bloque la reprise de vos contenus quelle que soit leur qualité : {motif}.",
     audience: {
-      haut: "Vous disposez en revanche des canaux nécessaires pour joindre vos lecteurs directement : {liste}.",
-      moyen: "Côté canaux directs, vous disposez de {liste}, mais il manque {manque}.",
-      bas: "Vous n'avez presque aucun moyen de joindre vos lecteurs sans passer par une plateforme : il manque {manque}.",
+      haut: "Vous disposez en revanche de l'essentiel des canaux pour joindre vos lecteurs directement : {liste}.",
+      moyen: "Côté canaux directs, vous avez déjà {liste}, mais il vous manque {manque}.",
+      bas: "Vous n'avez presque aucun moyen de joindre vos lecteurs sans passer par une plateforme : il vous manque {manque}.",
+    },
+    // Formes articulees des criteres, pour une insertion propre dans les phrases ci-dessus.
+    // Les criteres de citation (frein) prennent l'article defini, ceux d'audience l'indefini :
+    // les deux ensembles ne se croisent jamais dans une meme phrase.
+    syntagmes: {
+      robots: "l'accès des robots de récupération",
+      balisage: "le balisage de vos articles",
+      auteur: "la déclaration de l'auteur",
+      dateMaj: "la date de mise à jour",
+      chiffres: "les données chiffrées par article",
+      ouverture: "la réponse dès l'ouverture",
+      paragraphes: "la longueur des paragraphes",
+      listes: "les listes et tableaux",
+      sources: "les citations et sources primaires",
+      newsletter: "une offre de newsletters",
+      collecte: "un formulaire de collecte d'adresses",
+      compte: "un espace compte",
+      abonnement: "une offre d'abonnement",
+      application: "une application mobile",
+      push: "des notifications directes",
     },
     contenuPartiel: "Vos articles étant réservés aux abonnés, nous n'avons lu que l'extrait accessible : les mesures de longueur et de densité portent sur cette partie visible, celle que voient aussi les moteurs de réponse.",
     conclusion: {
@@ -1161,6 +1181,12 @@ function construireSynthese(citab, audience, malus, contenuPartiel) {
   const nA = niveauScore(audience.score);
   const p = [];
 
+  // Forme rédigée d'un critère, avec repli sur son nom si aucune n'est prévue.
+  const syn = function (cle) {
+    return (TEXTES.synthese.syntagmes && TEXTES.synthese.syntagmes[cle])
+      || TEXTES.criteres[cle].nom.toLowerCase();
+  };
+
   p.push(TEXTES.synthese.ouverture[nE]);
 
   // Le frein principal est nommé, pas résumé en généralités.
@@ -1168,8 +1194,7 @@ function construireSynthese(citab, audience, malus, contenuPartiel) {
     .filter(function (x) { return etatCritere(x.obtenu, x.max) !== "fort"; })
     .sort(function (a, b) { return (b.max - b.obtenu) - (a.max - a.obtenu); });
   if (faibles.length) {
-    p.push(TEXTES.synthese.frein.replace("{frein}",
-      TEXTES.criteres[faibles[0].cle].nom.toLowerCase()));
+    p.push(TEXTES.synthese.frein.replace("{frein}", syn(faibles[0].cle)));
   }
 
   if (malus.total > 0 && malus.liste.length) {
@@ -1178,10 +1203,10 @@ function construireSynthese(citab, audience, malus, contenuPartiel) {
 
   // Ce qui est en place et ce qui manque, nommément.
   const enPlace = audience.detail.filter(function (x) { return x.obtenu > 0; })
-    .map(function (x) { return TEXTES.criteres[x.cle].nom.toLowerCase(); });
+    .map(function (x) { return syn(x.cle); });
   const manquant = audience.detail.filter(function (x) { return x.obtenu === 0; })
     .sort(function (a, b) { return b.max - a.max; })
-    .map(function (x) { return TEXTES.criteres[x.cle].nom.toLowerCase(); });
+    .map(function (x) { return syn(x.cle); });
 
   const liste = function (t) {
     if (!t.length) return "";
