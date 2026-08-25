@@ -50,12 +50,16 @@ const UA_NAVIGATEUR = {
 // seul contournement fiable est de router la lecture par un service a IP residentielle.
 // Renseigner SCRAPER_KEY dans les variables Netlify active ce repli. Sans cle, le
 // comportement est identique a aujourd'hui, aucun credit n'est consomme. Adapter
-// l'URL au fournisseur retenu : ici ScrapingBee, render_js desactive pour le cout.
+// l'URL au fournisseur retenu : ici ScrapingBee. Le rendu JavaScript se pilote par
+// la variable SCRAPER_RENDER : la laisser vide pour les sites lisibles en direct,
+// la mettre a 1 pour les titres dont le corps d'article est charge par le navigateur
+// (lefigaro.fr, lemonde.fr). Le rendu JS coute davantage de credits par lecture.
 function viaProxy(u) {
   const cle = process.env.SCRAPER_KEY;
   if (!cle) return u;
+  const rendu = process.env.SCRAPER_RENDER === "1" ? "true" : "false";
   return "https://app.scrapingbee.com/api/v1/?api_key=" + cle
-       + "&render_js=false&url=" + encodeURIComponent(u);
+       + "&render_js=" + rendu + "&url=" + encodeURIComponent(u);
 }
 
 // Journal des echecs, remonte au rapport pour rendre toute panne explicable.
@@ -703,19 +707,32 @@ function analyserAudience(html) {
   };
   if (!html) return r;
 
-  // Capture newsletter : lien dedie ou formulaire email present
-  r.newsletter = /href=["'][^"']*\/(newsletter|newsletters|infolettre)/i.test(html)
-              || /(inscri\w+|abonn\w+)[^<]{0,40}newsletter/i.test(html);
+  // Texte decode, apostrophes typographiques normalisees. Sans cela, "S'abonner" ecrit
+  // avec une apostrophe courbe ou encodee, tres frequent, echappait a la detection.
+  const t = decodeEntites(html).replace(/[\u2018\u2019\u02bc]/g, "'");
+
+  // Capture newsletter : lien dedie, intitule d'inscription, ou promesse d'envoi.
+  r.newsletter = /href=["'][^"']*\/(newsletter|newsletters|infolettre|infolettres)/i.test(html)
+              || /href=["']https?:\/\/(newsletter|newsletters|nl)\.[^"']+/i.test(html)
+              || /(inscri\w+|abonn\w+|recev\w+)[^<]{0,40}newsletter/i.test(t)
+              || /newsletter[^<]{0,40}(inscri\w+|recev\w+)/i.test(t);
+
+  // Point de collecte d'adresses : champ email, ou dispositif d'inscription newsletter.
+  // Le champ est souvent injecte par le navigateur : on accepte donc aussi les intitules.
   r.formulaireEmail = /<input[^>]+type=["']email["']/i.test(html)
-                   || /<input[^>]+name=["'][^"']*(email|mail)[^"']*["']/i.test(html);
+                   || /<input[^>]+(name|id|placeholder)=["'][^"']*(email|e-mail|courriel)[^"']*["']/i.test(html)
+                   || /(votre\s+(adresse\s+)?(e-?mail|courriel)|saisir\s+votre\s+e-?mail|s'inscrire\s+(a|à)\s+la\s+newsletter|recevoir\s+(la|nos|notre)\s+newsletter)/i.test(t);
 
   // Espace compte : la connexion est le socle d'une relation identifiee
   r.compte = /href=["'][^"']*\/(login|connexion|se-connecter|mon-compte|moncompte|account|espace-client)/i.test(html)
-          || /(se\s+connecter|mon\s+compte|s'identifier)/i.test(html);
+          || /href=["']https?:\/\/(compte|connexion|account|login)\.[^"']+/i.test(html)
+          || /(se\s+connecter|mon\s+compte|s'identifier|s'inscrire|cr[eé]er\s+un\s+compte)/i.test(t);
 
-  // Offre d'abonnement
-  r.abonnement = /href=["'][^"']*\/(abonnement|abonnements|abonnez|offres|s-abonner|subscribe|premium)/i.test(html)
-              || /(s'abonner|nos\s+offres|devenir\s+abonn)/i.test(html);
+  // Offre d'abonnement : lien dedie, sous-domaine dedie (abo., abonnement., kiosque.),
+  // ou intitule d'appel. Les grands titres logent souvent l'offre sur un sous-domaine.
+  r.abonnement = /href=["'][^"']*\/(abonnement|abonnements|abonnez|offre|offres|formule|formules|s-abonner|subscribe|premium)/i.test(html)
+              || /href=["']https?:\/\/(abo|abonnement|abonnements|offre|offres|boutique|kiosque|store)\.[^"']+/i.test(html)
+              || /(s'abonner|je\s+m'abonne|abonnez-vous|nos\s+offres|nos\s+formules|d[eé]couvrir\s+(l'offre|nos\s+offres|les\s+offres)|devenir\s+abonn|espace\s+abonn)/i.test(t);
 
   // Application mobile
   // Liens de magasin, banniere native iOS/Android, ou lien alternate d'application.
@@ -867,7 +884,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-08-24 / v7 : plan de site prioritaire, repli elargi, en-tetes navigateur, hook proxy";
+const VERSION = "2026-08-24 / v8 : audience coherente (paywall implique abonnement, newsletter implique collecte), detection elargie";
 
 // ============================================================
 //  TEXTES DU RAPPORT
@@ -1078,17 +1095,32 @@ function scorePotentiel(m, robots) {
 }
 
 // --- Score 2 : audience détenue en propre ---
-function scoreAudience(a) {
+function scoreAudience(a, ctx) {
+  ctx = ctx || {};
   const b = function (v, plein) { return v ? plein : 0; };
+
+  // Deductions de certitude : ne jamais afficher un constat que les faits contredisent.
+  // Un paywall signifie que les articles sont reserves aux abonnes : l'offre d'abonnement
+  // existe forcement, meme si son lien n'a pas ete repere sur l'extrait lu.
+  const abonnement = a.abonnement || !!ctx.paywall;
+  // Une offre de newsletters est par nature un point de collecte : la creer suppose un
+  // formulaire d'inscription, souvent injecte par le navigateur et invisible dans le code
+  // brut. On ne declare donc pas "aucun point de collecte" quand la newsletter existe.
+  const collecte = a.formulaireEmail || a.newsletter;
+
   const d = [
     { cle: "compte", obtenu: b(a.compte, 25), max: 25,
       constat: a.compte ? "Un espace compte permet d'identifier le lecteur" : "Aucun espace compte repérable" },
     { cle: "newsletter", obtenu: b(a.newsletter, 22), max: 22,
       constat: a.newsletter ? "Une offre de newsletters est accessible" : "Aucune offre de newsletters repérable" },
-    { cle: "abonnement", obtenu: b(a.abonnement, 22), max: 22,
-      constat: a.abonnement ? "Une offre d'abonnement est accessible" : "Aucune offre d'abonnement repérable" },
-    { cle: "collecte", obtenu: b(a.formulaireEmail, 13), max: 13,
-      constat: a.formulaireEmail ? "Un point de collecte d'adresses est présent" : "Aucun point de collecte repérable" },
+    { cle: "abonnement", obtenu: b(abonnement, 22), max: 22,
+      constat: a.abonnement ? "Une offre d'abonnement est accessible"
+             : (ctx.paywall ? "Une offre d'abonnement est en place : vos articles sont réservés aux abonnés"
+                            : "Aucune offre d'abonnement repérable") },
+    { cle: "collecte", obtenu: b(collecte, 13), max: 13,
+      constat: a.formulaireEmail ? "Un point de collecte d'adresses est présent"
+             : (a.newsletter ? "Un point de collecte est en place via l'inscription à la newsletter"
+                             : "Aucun point de collecte repérable") },
     { cle: "application", obtenu: b(a.appMobile, 10), max: 10,
       constat: a.appMobile ? "Une application mobile est proposée" : "Aucune application mobile repérée" },
     { cle: "push", obtenu: b(a.push, 8), max: 8,
@@ -1380,7 +1412,7 @@ exports.handler = async function (event) {
   citab.malus = malus;
   citab.score = Math.max(0, citab.score - malus.total);
 
-  const audience = scoreAudience(site.audience || {});
+  const audience = scoreAudience(site.audience || {}, { paywall: site.paywall });
   const reecritures = await genererReecritures(site.extraits);
 
   return json(200, {
