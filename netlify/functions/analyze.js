@@ -884,7 +884,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-08-24 / v9 : synthese redigee (formes articulees des criteres), audience coherente, detection elargie";
+const VERSION = "2026-08-24 / v10 : paywall reformule (choix de modele, pas blocage), synthese redigee, audience coherente";
 
 // ============================================================
 //  TEXTES DU RAPPORT
@@ -1019,6 +1019,7 @@ const TEXTES = {
       push: "des notifications directes",
     },
     contenuPartiel: "Vos articles étant réservés aux abonnés, nous n'avons lu que l'extrait accessible : les mesures de longueur et de densité portent sur cette partie visible, celle que voient aussi les moteurs de réponse.",
+    paywallAssume: "Vos articles sont pour l'essentiel réservés aux abonnés : un choix assumé, au service de votre modèle d'abonnement. Sa contrepartie est mécanique : les moteurs de réponse, comme nous, ne lisent que l'extrait laissé en accès libre, et c'est sur cette partie visible que se mesure votre potentiel de citation.",
     conclusion: {
       risque: "Une baisse de visibilité sur les moteurs se traduirait donc directement par une perte d'audience, sans relais pour la retenir.",
       amorti: "Une baisse de visibilité sur les moteurs serait donc partiellement absorbée par vos canaux directs.",
@@ -1197,8 +1198,12 @@ function construireSynthese(citab, audience, malus, contenuPartiel) {
     p.push(TEXTES.synthese.frein.replace("{frein}", syn(faibles[0].cle)));
   }
 
-  if (malus.total > 0 && malus.liste.length) {
-    p.push(TEXTES.synthese.blocage.replace("{motif}", malus.liste[0].libelle.toLowerCase()));
+  // Le paywall n'est pas traité comme un blocage : c'est un choix de modèle, reformulé
+  // plus bas. Seuls les vrais freins techniques (nosnippet, noindex, robots, absence de
+  // date) gardent un ton ferme ici, car eux relèvent d'une erreur, pas d'une décision.
+  const blocagesTech = malus.liste.filter(function (x) { return !/paywall/i.test(x.libelle); });
+  if (blocagesTech.length) {
+    p.push(TEXTES.synthese.blocage.replace("{motif}", blocagesTech[0].libelle.toLowerCase()));
   }
 
   // Ce qui est en place et ce qui manque, nommément.
@@ -1224,7 +1229,11 @@ function construireSynthese(citab, audience, malus, contenuPartiel) {
     p.push(TEXTES.synthese.audience.bas.replace("{manque}", liste(manquant.slice(0, 3))));
   }
 
-  if (contenuPartiel) p.push(TEXTES.synthese.contenuPartiel);
+  // Reformulation assumée du paywall : la vérité (nous ne lisons que l'extrait libre) sans
+  // la connoter comme un échec, puisque c'est un choix au service du modèle d'abonnement.
+  const paywallPresent = malus.liste.some(function (x) { return /paywall/i.test(x.libelle); });
+  if (paywallPresent) p.push(TEXTES.synthese.paywallAssume);
+  else if (contenuPartiel) p.push(TEXTES.synthese.contenuPartiel);
 
   if (nE === "haut" && nA !== "bas") p.push(TEXTES.synthese.conclusion.solide);
   else if (nA === "bas") p.push(TEXTES.synthese.conclusion.risque);
