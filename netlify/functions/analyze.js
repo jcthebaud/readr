@@ -884,7 +884,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-08-24 / v10 : paywall reformule (choix de modele, pas blocage), synthese redigee, audience coherente";
+const VERSION = "2026-08-24 / v11 : rapport 100% extractif (reformulations IA supprimees), comptes au format francais, paywall reformule";
 
 // ============================================================
 //  TEXTES DU RAPPORT
@@ -1044,6 +1044,16 @@ const TEXTES = {
 //  Deux scores, quinze critères, aucun doublon.
 // ============================================================
 
+// Nombre au format francais : virgule decimale, sans decimale inutile ("1.7" -> "1,7", "4.0" -> "4").
+function frNombre(x) {
+  const a = Math.round(x * 10) / 10;
+  return Number.isInteger(a) ? String(a) : String(a).replace(".", ",");
+}
+// Accord singulier / pluriel : en francais, le pluriel commence a 2 (0 et 1 restent au singulier).
+function accord(x, sing, plur) {
+  return Math.abs(x) >= 2 ? plur : sing;
+}
+
 function pts(valeur, paliers) {
   for (let i = 0; i < paliers.length; i++) {
     if (valeur >= paliers[i][0]) return paliers[i][1];
@@ -1072,14 +1082,15 @@ function scorePotentiel(m, robots) {
   if (robots && robots.dispo) {
     const ouverts = robots.recupTotal - robots.recupBloques;
     ptsRobots = Math.round((ouverts / robots.recupTotal) * 16);
-    constatRobots = ouverts + " robot(s) de récupération sur " + robots.recupTotal + " ont accès au site";
+    constatRobots = ouverts + " " + accord(ouverts, "robot", "robots") + " de récupération sur "
+                  + robots.recupTotal + " " + accord(ouverts, "a", "ont") + " accès au site";
   } else {
     constatRobots = "Fichier robots.txt non lisible";
   }
   d.push({ cle: "robots", obtenu: ptsRobots, max: 16, constat: constatRobots });
 
   d.push({ cle: "chiffres", obtenu: pts(m.chiffresMoyen, [[4, 14], [3, 11], [2, 8], [1, 4]]), max: 14,
-           constat: m.chiffresMoyen + " donnée(s) chiffrée(s) en moyenne par article" });
+           constat: frNombre(m.chiffresMoyen) + " " + accord(m.chiffresMoyen, "donnée chiffrée", "données chiffrées") + " en moyenne par article" });
 
   d.push({ cle: "balisage", obtenu: etatVers(m.balisageNews === "present" ? "present" : m.balisageArticle, 12, 6), max: 12,
            constat: m.balisageNews === "present" ? "Vos articles sont déclarés comme contenu de presse"
@@ -1102,14 +1113,15 @@ function scorePotentiel(m, robots) {
                                              : "Le premier paragraphe ne répond pas directement" });
 
   d.push({ cle: "listes", obtenu: pts(m.listesMoyen, [[3, 8], [2, 6], [1, 4]]), max: 8,
-           constat: m.listesMoyen + " liste(s) ou tableau(x) par article" });
+           constat: frNombre(m.listesMoyen) + " " + accord(m.listesMoyen, "liste ou tableau", "listes ou tableaux") + " par article" });
 
   d.push({ cle: "dateMaj", obtenu: etatVers(m.dateMaj, 8, 4), max: 8,
            constat: m.dateMaj === "present" ? "Date de modification déclarée" : "Aucune date de modification déclarée" });
 
   d.push({ cle: "sources",
            obtenu: pts(m.sourcesMoyen, [[2, 5], [1, 3]]) + pts(m.citationsMoyen, [[2, 3], [1, 2]]), max: 8,
-           constat: m.sourcesMoyen + " lien(s) vers des sources primaires et " + m.citationsMoyen + " citation(s) par article" });
+           constat: frNombre(m.sourcesMoyen) + " " + accord(m.sourcesMoyen, "lien", "liens") + " vers des sources primaires et "
+                  + frNombre(m.citationsMoyen) + " " + accord(m.citationsMoyen, "citation", "citations") + " par article" });
 
   const total = d.reduce(function (a, x) { return a + x.obtenu; }, 0);
   return { score: total, detail: d };
@@ -1447,7 +1459,6 @@ exports.handler = async function (event) {
   citab.score = Math.max(0, citab.score - malus.total);
 
   const audience = scoreAudience(site.audience || {}, { paywall: site.paywall });
-  const reecritures = await genererReecritures(site.extraits);
 
   return json(200, {
     mesurable: true,
@@ -1466,7 +1477,6 @@ exports.handler = async function (event) {
       renvoi: !!site.ouvertureRenvoi,
     },
     passage: site.passage || "",
-    reecritures: reecritures,
     robots: robots,
     site_: site,
     version: VERSION,
