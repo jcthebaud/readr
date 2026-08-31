@@ -734,12 +734,15 @@ function analyserAudience(html) {
               || /href=["']https?:\/\/(abo|abonnement|abonnements|offre|offres|boutique|kiosque|store)\.[^"']+/i.test(html)
               || /(s'abonner|je\s+m'abonne|abonnez-vous|nos\s+offres|nos\s+formules|d[eé]couvrir\s+(l'offre|nos\s+offres|les\s+offres)|devenir\s+abonn|espace\s+abonn)/i.test(t);
 
-  // Application mobile
-  // Liens de magasin, banniere native iOS/Android, ou lien alternate d'application.
-  r.appMobile = /(apps\.apple\.com|itunes\.apple\.com|play\.google\.com\/store\/apps|market:\/\/details)/i.test(html)
+  // Application mobile : liens de magasin, redirecteurs d'app (les badges pointent souvent
+  // vers un tracker et non vers le store en direct), bannieres natives, page ou intitule
+  // de telechargement. L'ancienne detection ratait tout ce qui n'etait pas un lien store direct.
+  r.appMobile = /(apps\.apple\.com|itunes\.apple\.com|play\.google\.com\/store\/apps|market:\/\/details|onelink\.me|app\.link|app\.goo\.gl|adjust\.com|branch\.io|smart\.link)/i.test(html)
              || /<meta[^>]+name=["'](apple-itunes-app|google-play-app)["']/i.test(html)
              || /<link[^>]+href=["'](android-app|ios-app):/i.test(html)
-             || /href=["'][^"']*\/(application|applications|nos-applications|app-mobile)["'\/]/i.test(html);
+             || /href=["']https?:\/\/app\.[^"']+/i.test(html)
+             || /href=["'][^"']*\/(application|applications|nos-applications|app-mobile|nos-apps|telecharger-l-application|telecharger-l-appli|telecharger-nos-applications|nos-applications-mobiles)(["'\/?#]|$)/i.test(html)
+             || /(t[eé]l[eé]charg\w*\s+(l'|notre\s+|nos\s+)?(appli|application)|disponible\s+sur\s+(l'app\s?store|l'appstore|le\s+google\s+play|google\s+play)|notre\s+application\s+mobile|retrouvez[-\s]nous\s+sur\s+l'appli)/i.test(t);
 
   // Notifications push : canal direct, sans intermediaire
   r.push = /(onesignal|batch\.com|batchsdk|pushwoosh|serviceWorker[\s\S]{0,120}push|firebase-messaging)/i.test(html);
@@ -884,7 +887,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-08-24 / v11 : rapport 100% extractif (reformulations IA supprimees), comptes au format francais, paywall reformule";
+const VERSION = "2026-08-24 / v12 : detection app mobile elargie (redirecteurs, page et intitules de telechargement), rapport extractif";
 
 // ============================================================
 //  TEXTES DU RAPPORT
