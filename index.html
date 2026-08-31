@@ -460,30 +460,8 @@
       <p class="h2note">Les critères sur lesquels vous perdez le plus de points, avec l'action correspondante.</p>
       <div id="r-recos"></div>
 
-      <h2>Le premier paragraphe de vos articles</h2>
-      <p class="h2note">Nous avons relevé le paragraphe d'attaque d'un de vos articles, tel qu'il figure
-        dans le corps du texte. C'est celui qu'un moteur lit en premier pour décider si votre article
-        répond à la question posée. Trois conditions le rendent exploitable : rester court, contenir une
-        donnée concrète, et se comprendre sans avoir lu ce qui précède.</p>
-      <div id="r-ouv"></div>
-
-      <h2>Un exemple de passage reprenable</h2>
-      <p class="h2note">Un moteur de réponse ne cite jamais un article entier : il en extrait une ou deux
-        phrases. Parmi tous les paragraphes de vos articles analysés, voici celui qui remplit le mieux les
-        conditions de reprise : une longueur de vingt-cinq à soixante-dix mots, au moins une donnée
-        vérifiable, une phrase complète, et aucun mot renvoyant à ce qui précède. Il sert d'exemple de ce
-        que vos contenus offrent déjà.</p>
-      <div id="r-passage"></div>
-
-      <div class="sousbloc hidden" id="r-reec-bloc">
-        <div class="sousbloc-t">Trois passages reformulés</div>
-        <p class="sousbloc-n">Reformulations de vos propres passages, sans ajout d'information : la réponse
-          en première phrase, l'entité nommée, aucun renvoi au contexte.</p>
-        <div id="r-reec"></div>
-      </div>
-
       <h2>Le détail des mesures</h2>
-      <p class="h2note">Quinze critères relevés dans le code de vos pages. Chaque score est la somme de points
+      <p class="h2note">Quinze critères relevés dans le code de vos articles. Chaque score est la somme de points
         attribués selon une grille fixe, identique pour tous les médias analysés.</p>
       <div id="r-constats"></div>
       <div id="r-malus"></div>
@@ -500,6 +478,21 @@
         <div id="r-robots-list"></div>
       </div>
       <p class="calc-note" id="r-reseaux-note"></p>
+
+      <h2>Le premier paragraphe de vos articles</h2>
+      <p class="h2note">Nous avons relevé le paragraphe d'attaque d'un de vos articles, tel qu'il figure
+        dans le corps du texte. C'est celui qu'un moteur lit en premier pour décider si votre article
+        répond à la question posée. Trois conditions le rendent exploitable : rester court, contenir une
+        donnée concrète, et se comprendre sans avoir lu ce qui précède.</p>
+      <div id="r-ouv"></div>
+
+      <h2>Un exemple de passage reprenable</h2>
+      <p class="h2note">Un moteur de réponse ne cite jamais un article entier : il en extrait une ou deux
+        phrases. Parmi tous les paragraphes de vos articles analysés, voici celui qui remplit le mieux les
+        conditions de reprise : une longueur de vingt-cinq à soixante-dix mots, au moins une donnée
+        vérifiable, une phrase complète, et aucun mot renvoyant à ce qui précède. Il sert d'exemple de ce
+        que vos contenus offrent déjà.</p>
+      <div id="r-passage"></div>
 
       <div class="offre">
         <div class="offre-k">Pour aller plus loin</div>
@@ -684,7 +677,9 @@
     el("r-cit-score").textContent = data.potentiel.score;
     el("r-aud-score").textContent = data.audience.score;
     el("r-synthese").textContent = data.synthese || "";
-    el("r-meta").textContent = fmt(T.articlesLus, { n: data.site_.nbPages, t: data.site_.nbTentees })
+    var nLus = data.site_.nbPages;
+    el("r-meta").textContent = "Mesure effectuée sur " + nLus + (nLus >= 2 ? " articles récents" : " article récent")
+      + " de votre média, à l'instant de l'analyse"
       + (data.site_.viaPlanDeSite ? " " + T.viaPlan : "");
 
     // priorités
@@ -719,16 +714,8 @@
       ? '<div class="passage">'+esc(data.passage)+'</div>'
       : '<div class="passage-ko">'+T.passageAucun+'</div>';
 
-    // reformulations, facultatives
-    var re = data.reecritures || [];
-    if(re.length){
-      var hr = "";
-      re.forEach(function(r){
-        hr += '<div class="reec"><div class="reec-f">'+esc(r.faiblesse)+'</div>'
-            + '<div class="reec-v">'+esc(r.version)+'</div></div>';
-      });
-      el("r-reec").innerHTML = hr; show("r-reec-bloc");
-    } else { hide("r-reec-bloc"); }
+    // Section "passages reformulés" retirée : elle produisait du texte généré (risque de
+    // fabrication) et exposait le détail technique de lecture. Le rapport reste 100 % extractif.
 
     // constats détaillés
     var hc = "", famille = "";
