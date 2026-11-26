@@ -25,6 +25,10 @@ exports.handler = async function (event) {
         theme: d.theme || "",
         scoreCitabilite: nb(d.scoreCitabilite),
         scoreAudience: nb(d.scoreAudience),
+        // Anciens noms des deux scores : le script de la feuille Google encore en ligne
+        // les attend sous ces cles, et laissait sinon les colonnes de score vides.
+        scoreAio: nb(d.scoreCitabilite),
+        scoreLlm: nb(d.scoreAudience),
         pagesLues: d.pagesLues || 0,
         robotsBloques: nb(d.robotsBloques),
         robotsTotal: nb(d.robotsTotal),

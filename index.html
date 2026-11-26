@@ -153,6 +153,9 @@
   .reco-meta{ margin-top:11px; font-size:13px; color:var(--muted); }
 
   .veil{ filter:blur(6px); opacity:.45; pointer-events:none; user-select:none; }
+  #rapport.robots-seuls .mes{ display:none !important; }
+  #rapport .rs{ display:none; }
+  #rapport.robots-seuls .rs{ display:inline; }
   #rapport{ transition:filter .35s ease, opacity .35s ease; }
 
   .mode{ margin-top:14px; font-size:13px; display:inline-flex; align-items:center; gap:8px;
@@ -347,7 +350,7 @@
       <div class="row">
         <div>
           <label class="label" for="url">Adresse de votre média</label>
-          <input id="url" class="input" type="text" placeholder="economist.com" autocomplete="off" />
+          <input id="url" class="input" type="text" placeholder="votremedia.fr" autocomplete="off" />
         </div>
         <div>
           <label class="label" for="theme">Thématique dominante</label>
@@ -425,16 +428,16 @@
     <div id="nonmes" class="nonmes hidden">
       <b>Aucun score n'a pu être calculé.</b>
       <div id="nonmes-raison"></div>
-      <div class="nonmes-plus">Nous préférons ne rien afficher plutôt qu'une estimation. Ce constat vaut
-        lui-même diagnostic : ce que nous ne pouvons pas lire, un moteur de réponse ne le lit pas
-        davantage.</div>
+      <div class="nonmes-plus">Nous préférons ne rien afficher plutôt qu'une estimation.
+        <span id="nonmes-miroir">Ce constat vaut lui-même diagnostic : ce que nous ne pouvons pas lire,
+        un moteur de réponse ne le lit pas davantage.</span></div>
       <div class="nonmes-detail" id="nonmes-detail"></div>
     </div>
 
     <div class="noprint">
       <div class="gate" id="gate">
-        <h3>Afficher le rapport complet</h3>
-        <p>Le détail des quinze critères mesurés, vos priorités de correction et la version imprimable
+        <h3 id="gate-titre">Afficher le rapport complet</h3>
+        <p id="gate-texte">Le détail des quinze critères mesurés, vos priorités de correction et la version imprimable
           s'affichent immédiatement sur cette page.</p>
         <input id="email" class="input" type="email" placeholder="prenom.nom@votremedia.fr" autocomplete="off" />
         <label class="check">
@@ -450,23 +453,23 @@
     <!-- Rapport détaillé -->
     <div id="rapport" class="veil">
 
-      <div class="barre-outils noprint" id="r-outils">
+      <div class="barre-outils noprint mes" id="r-outils">
         <button class="btn-sec" id="print-btn">Imprimer ou enregistrer en PDF</button>
         <span class="outils-note">Le document reprend la synthèse, vos priorités et le détail des mesures.</span>
       </div>
       <div id="done" class="done hidden noprint">Rapport complet affiché. Nous revenons vers vous prochainement.</div>
 
-      <h2>Vos priorités</h2>
-      <p class="h2note">Les critères sur lesquels vous perdez le plus de points, avec l'action correspondante.</p>
-      <div id="r-recos"></div>
+      <h2 class="mes">Vos priorités</h2>
+      <p class="h2note mes">Les critères sur lesquels vous perdez le plus de points, avec l'action correspondante.</p>
+      <div id="r-recos" class="mes"></div>
 
-      <h2>Le détail des mesures</h2>
-      <p class="h2note">Quinze critères relevés dans le code de vos articles. Chaque score est la somme de points
+      <h2 class="mes">Le détail des mesures</h2>
+      <p class="h2note mes">Quinze critères relevés dans le code de vos articles. Chaque score est la somme de points
         attribués selon une grille fixe, identique pour tous les médias analysés.</p>
-      <div id="r-constats"></div>
-      <div id="r-malus"></div>
+      <div id="r-constats" class="mes"></div>
+      <div id="r-malus" class="mes"></div>
 
-      <h2>Vos robots et vos canaux</h2>
+      <h2><span class="mes">Vos robots et vos canaux</span><span class="rs">Vos robots IA</span></h2>
       <div class="robots" id="r-robots-block">
         <div class="robots-head"><span class="robots-title">Robots IA déclarés dans votre robots.txt</span>
           <span class="measured">Donnée vérifiée</span></div>
@@ -477,22 +480,22 @@
           arbitrage sur les droits, sans effet direct sur votre visibilité immédiate.</p>
         <div id="r-robots-list"></div>
       </div>
-      <p class="calc-note" id="r-reseaux-note"></p>
+      <p class="calc-note mes" id="r-reseaux-note"></p>
 
-      <h2>Le premier paragraphe de vos articles</h2>
-      <p class="h2note">Nous avons relevé le paragraphe d'attaque d'un de vos articles, tel qu'il figure
+      <h2 class="mes">Le premier paragraphe de vos articles</h2>
+      <p class="h2note mes">Nous avons relevé le paragraphe d'attaque d'un de vos articles, tel qu'il figure
         dans le corps du texte. C'est celui qu'un moteur lit en premier pour décider si votre article
         répond à la question posée. Trois conditions le rendent exploitable : rester court, contenir une
         donnée concrète, et se comprendre sans avoir lu ce qui précède.</p>
-      <div id="r-ouv"></div>
+      <div id="r-ouv" class="mes"></div>
 
-      <h2>Un exemple de passage reprenable</h2>
-      <p class="h2note">Un moteur de réponse ne cite jamais un article entier : il en extrait une ou deux
+      <h2 class="mes">Un exemple de passage reprenable</h2>
+      <p class="h2note mes">Un moteur de réponse ne cite jamais un article entier : il en extrait une ou deux
         phrases. Parmi tous les paragraphes de vos articles analysés, voici celui qui remplit le mieux les
         conditions de reprise : une longueur de vingt-cinq à soixante-dix mots, au moins une donnée
         vérifiable, une phrase complète, et aucun mot renvoyant à ce qui précède. Il sert d'exemple de ce
         que vos contenus offrent déjà.</p>
-      <div id="r-passage"></div>
+      <div id="r-passage" class="mes"></div>
 
       <div class="offre">
         <div class="offre-k">Pour aller plus loin</div>
@@ -500,8 +503,8 @@
         <p class="offre-p">Readr est une agence indépendante spécialisée sur les médias et l'abonnement.
           Nous intervenons sur ce qui vous appartient : stratégie CRM et marketing automation, offre de
           newsletters, parcours de connexion et d'abonnement, acquisition diversifiée, exploitation de vos
-          données. Une partie des correctifs ci-dessus relève de votre équipe technique ou de votre
-          rédaction. La transformation de votre audience en base d'abonnés, c'est notre métier.</p>
+          données. <span class="mes">Une partie des correctifs ci-dessus relève de votre équipe technique ou de
+          votre rédaction.</span> La transformation de votre audience en base d'abonnés, c'est notre métier.</p>
         <div class="offre-l">
           <a href="https://www.readr.agency/rendezvous" target="_blank" rel="noopener">Prendre rendez-vous</a>
           <a href="https://www.readr.agency/" target="_blank" rel="noopener">readr.agency</a>
@@ -546,10 +549,11 @@
       "Relevé du balisage et des signatures",
       "Calcul de vos deux scores"
     ],
-    erreurDomaine : "Indiquez le domaine complet avec son extension, par exemple economist.com",
+    erreurDomaine : "Indiquez le domaine complet avec son extension, par exemple votremedia.fr",
     erreurGenerale: "Le diagnostic n'a pas abouti : ",
     redirection   : "redirection depuis",
-    articlesLus   : "{n} article(s) analysé(s) sur votre site, sur {t} pages testées",
+    articlesLus   : ["{n} article analysé sur votre site, sur {t} pages testées",
+                     "{n} articles analysés sur votre site, sur {t} pages testées"],
     articlesNon   : "Vos articles n'ont pas pu être lus",
     etats         : { fort: "Solide", moyen: "À renforcer", faible: "Point faible" },
     labelsOuv     : {
@@ -562,16 +566,22 @@
     malusTitre    : "Points retirés : ce qui limite l'extraction",
     malusSousTotal: "Sous-total avant retraits : {b} / 100",
     robotsAucun   : "Aucun des {n} robots IA suivis n'est bloqué sur votre site.",
-    robotsBloques : "{b} robots IA sur {n} sont bloqués sur votre site.",
+    robotsBloques : ["{b} robot IA sur {n} est bloqué sur votre site.",
+                     "{b} robots IA sur {n} sont bloqués sur votre site."],
     robotsIllisible: "Votre fichier robots.txt n'a pas pu être lu.",
     etatsRobots   : { bloque: "Bloqué", partiel: "Partiel", autorise: "Autorisé" },
     usageRecup    : "Récupération",
     usageEntrain  : "Entraînement",
-    alerteRecupT  : "{b} robot(s) de récupération bloqué(s) sur {n}",
-    alerteRecupX  : "Sont concernés : {l}. Ces robots conditionnent directement la citation de vos articles. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'être technique.",
-    alerteEntrT   : "{b} robot(s) d'entraînement bloqué(s) sur {n}",
-    alerteEntrX   : "Sont concernés : {l}. Ces robots alimentent l'entraînement des modèles. Les bloquer n'empêche pas Google d'afficher un résumé à partir de vos articles.",
-    reseaux       : "Nous avons relevé {n} lien(s) vers des réseaux sociaux. Ces canaux apportent de l'audience, mais la relation avec le lecteur y reste détenue par la plateforme.",
+    alerteRecupT  : ["{b} robot de récupération bloqué sur {n}",
+                     "{b} robots de récupération bloqués sur {n}"],
+    alerteRecupX  : ["Est concerné : {l}. Ce robot conditionne directement la citation de vos articles. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'être technique.",
+                     "Sont concernés : {l}. Ces robots conditionnent directement la citation de vos articles. Si ce blocage est volontaire, au titre des droits voisins, l'arbitrage est contractuel avant d'être technique."],
+    alerteEntrT   : ["{b} robot d'entraînement bloqué sur {n}",
+                     "{b} robots d'entraînement bloqués sur {n}"],
+    alerteEntrX   : ["Est concerné : {l}. Ce robot alimente l'entraînement des modèles. Le bloquer n'empêche pas Google d'afficher un résumé à partir de vos articles.",
+                     "Sont concernés : {l}. Ces robots alimentent l'entraînement des modèles. Les bloquer n'empêche pas Google d'afficher un résumé à partir de vos articles."],
+    reseaux       : ["Nous avons relevé {n} lien vers un réseau social. Ce canal apporte de l'audience, mais la relation avec le lecteur y reste détenue par la plateforme.",
+                     "Nous avons relevé {n} liens vers des réseaux sociaux. Ces canaux apportent de l'audience, mais la relation avec le lecteur y reste détenue par la plateforme."],
     raisons       : {
       "page d'accueil illisible"        : "Votre site a refusé notre requête de lecture, ce qui arrive avec certaines protections anti-robots.",
       "aucune page article identifiee"  : "Nous avons atteint votre site mais n'avons pas pu identifier d'article à analyser depuis l'accueil.",
@@ -580,10 +590,22 @@
       "contenu charge par le navigateur": "Le corps de vos articles n'est pas présent dans le code envoyé par votre serveur : il est chargé ensuite par le navigateur. Les moteurs de réponse rencontrent la même difficulté que nous.",
       defaut                            : "Vos articles n'ont pas pu être lus automatiquement."
     },
+    // La phrase « ce que nous ne pouvons pas lire, un moteur de réponse ne le lit pas davantage »
+    // ne s'affiche que pour ces raisons. Un pare-feu anti-robots refuse notre lecture mais laisse
+    // souvent passer les robots vérifiés : l'écrire dans ce cas serait faux.
+    raisonsMiroir : ["contenu reserve", "contenu charge par le navigateur"],
     viaPlan       : "Votre page d'accueil n'étant pas accessible depuis un serveur, les articles ont été trouvés via votre plan de site.",
     detailTechnique: "Détail technique :",
     boutonAttente : "Affichage en cours",
-    boutonNormal  : "Afficher le rapport complet"
+    boutonNormal  : "Afficher le rapport complet",
+    porteTitre    : "Afficher le rapport complet",
+    porteTexte    : "Le détail des quinze critères mesurés, vos priorités de correction et la version imprimable s'affichent immédiatement sur cette page.",
+    termine       : "Rapport complet affiché. Nous revenons vers vous prochainement.",
+    // Quand aucun article n'a pu être lu, seul l'état des robots peut être affiché.
+    boutonRobots     : "Afficher l'état de vos robots IA",
+    porteRobotsTitre : "Afficher l'état de vos robots IA",
+    porteRobotsTexte : "La liste des robots IA autorisés ou bloqués par votre fichier robots.txt s'affiche immédiatement sur cette page.",
+    termineRobots    : "État de vos robots IA affiché. Nous revenons vers vous prochainement."
   };
 
   /* ============================================================ */
@@ -594,7 +616,14 @@
   var esc = function(t){ var d=document.createElement("div"); d.textContent=(t==null?"":String(t)); return d.innerHTML; };
   var fmt = function(t,o){ Object.keys(o||{}).forEach(function(k){ t = t.split("{"+k+"}").join(o[k]); }); return t; };
 
+  // Singulier ou pluriel : en français, le pluriel commence à 2.
+  var pl = function(n, formes){ return Math.abs(n) >= 2 ? formes[1] : formes[0]; };
+
   var data = null, minuteur = null, hostAnalyse = "";
+  // Lien direct envoyé par Readr (?site=domaine&rapport=complet) : le rapport s'affiche
+  // sans demande d'adresse, le destinataire étant déjà connu.
+  var accesDirect = false;
+  var libelleBouton = T.boutonNormal;
   var RE_DOMAINE = /^(?!-)[a-z0-9-]{1,63}(\.(?!-)[a-z0-9-]{1,63})*\.[a-z]{2,24}$/i;
 
   el("url").addEventListener("input", function(){ el("analyze-btn").disabled = el("url").value.trim()===""; });
@@ -663,16 +692,17 @@
       el("r-synthese").textContent = "";
       el("r-meta").textContent = T.articlesNon;
       el("nonmes-raison").textContent = T.raisons[data.raison] || T.raisons.defaut;
+      el("nonmes-miroir").classList.toggle("hidden", T.raisonsMiroir.indexOf(data.raison) === -1);
       var j = (data.journal || []);
       el("nonmes-detail").textContent = j.length ? (T.detailTechnique + " " + j.join(" ; ")) : "";
       show("nonmes");
       // Le robots.txt reste souvent lisible : on conserve cette partie et la capture.
-      if(data.robots && data.robots.dispo){ robots(data.robots); show("gate"); }
-      else { hide("gate"); }
-      hide("rapport");
+      // Le rapport se réduit alors à l'état des robots, seule mesure disponible.
+      if(data.robots && data.robots.dispo){ robots(data.robots); preparerRapport(true); }
+      else { hide("gate"); hide("rapport"); }
       return;
     }
-    hide("nonmes"); show("rapport"); show("gate");
+    hide("nonmes");
 
     el("r-cit-score").textContent = data.potentiel.score;
     el("r-aud-score").textContent = data.audience.score;
@@ -680,7 +710,7 @@
     var nLus = data.site_.nbPages;
     el("r-meta").textContent = "Mesure effectuée sur " + nLus + (nLus >= 2 ? " articles récents" : " article récent")
       + " de votre média, à l'instant de l'analyse"
-      + (data.site_.viaPlanDeSite ? " " + T.viaPlan : "");
+      + (data.site_.viaPlanDeSite ? ". " + T.viaPlan : "");
 
     // priorités
     var h = "";
@@ -752,12 +782,33 @@
     } else { el("r-malus").innerHTML = ""; }
 
     robots(data.robots);
-    el("r-reseaux-note").textContent = (data.audience.reseaux>0) ? fmt(T.reseaux,{n:data.audience.reseaux}) : "";
+    el("r-reseaux-note").textContent = (data.audience.reseaux>0)
+      ? fmt(pl(data.audience.reseaux, T.reseaux),{n:data.audience.reseaux}) : "";
 
+    preparerRapport(false);
+  }
+
+  // Prépare le bloc du rapport, voilé derrière la demande d'adresse : complet, ou réduit
+  // à l'état des robots quand aucun article n'a pu être mesuré.
+  function preparerRapport(robotsSeuls){
+    el("rapport").classList.toggle("robots-seuls", robotsSeuls);
     el("rapport").classList.add("veil");
     el("r-outils").classList.add("hidden");
     hide("done");
+    libelleBouton = robotsSeuls ? T.boutonRobots : T.boutonNormal;
+    el("gate-titre").textContent = robotsSeuls ? T.porteRobotsTitre : T.porteTitre;
+    el("gate-texte").textContent = robotsSeuls ? T.porteRobotsTexte : T.porteTexte;
+    el("unlock-btn").textContent = libelleBouton;
+    el("done").textContent = robotsSeuls ? T.termineRobots : T.termine;
     el("email").value=""; el("consent").checked=false; el("unlock-btn").disabled=true;
+    show("rapport");
+    if(accesDirect){ ouvrirRapport(); } else { show("gate"); }
+  }
+
+  function ouvrirRapport(){
+    el("rapport").classList.remove("veil");
+    el("r-outils").classList.remove("hidden");
+    hide("gate");
   }
 
   function alerteRobots(rb){
@@ -765,19 +816,19 @@
     if(!rb || !rb.dispo){ a.classList.add("hidden"); return; }
     if(rb.recupBloques > 0){
       a.className = "alerte";
-      el("r-alerte-titre").textContent = fmt(T.alerteRecupT,{b:rb.recupBloques,n:rb.recupTotal});
-      el("r-alerte-txt").textContent = fmt(T.alerteRecupX,{l:(rb.recupListeBloques||[]).join(", ")});
+      el("r-alerte-titre").textContent = fmt(pl(rb.recupBloques, T.alerteRecupT),{b:rb.recupBloques,n:rb.recupTotal});
+      el("r-alerte-txt").textContent = fmt(pl(rb.recupBloques, T.alerteRecupX),{l:(rb.recupListeBloques||[]).join(", ")});
     } else if(rb.entrainBloques > 0){
       a.className = "alerte douce";
-      el("r-alerte-titre").textContent = fmt(T.alerteEntrT,{b:rb.entrainBloques,n:rb.entrainTotal});
-      el("r-alerte-txt").textContent = fmt(T.alerteEntrX,{l:(rb.entrainListeBloques||[]).join(", ")});
+      el("r-alerte-titre").textContent = fmt(pl(rb.entrainBloques, T.alerteEntrT),{b:rb.entrainBloques,n:rb.entrainTotal});
+      el("r-alerte-txt").textContent = fmt(pl(rb.entrainBloques, T.alerteEntrX),{l:(rb.entrainListeBloques||[]).join(", ")});
     } else { a.classList.add("hidden"); }
   }
 
   function robots(rb){
     if(!rb || !rb.dispo){ el("r-robots-intro").textContent = T.robotsIllisible; el("r-robots-list").innerHTML=""; return; }
     el("r-robots-intro").textContent = rb.nbBloques===0
-      ? fmt(T.robotsAucun,{n:rb.nbTotal}) : fmt(T.robotsBloques,{b:rb.nbBloques,n:rb.nbTotal});
+      ? fmt(T.robotsAucun,{n:rb.nbTotal}) : fmt(pl(rb.nbBloques, T.robotsBloques),{b:rb.nbBloques,n:rb.nbTotal});
     var h="";
     (rb.bots||[]).forEach(function(b){
       var e = (b.etat==="bloque"||b.etat==="partiel"||b.etat==="autorise") ? b.etat : "autorise";
@@ -810,19 +861,32 @@
         })
       });
     }catch(e){ /* le rapport s'affiche quand même */ }
-    el("rapport").classList.remove("veil");
-    el("r-outils").classList.remove("hidden");
-    hide("gate"); show("done");
-    el("unlock-btn").textContent = T.boutonNormal;
+    ouvrirRapport(); show("done");
+    el("unlock-btn").textContent = libelleBouton;
   }
 
   function recommencer(){
     data = null;
+    accesDirect = false;
+    try { window.history.replaceState(null, "", window.location.pathname); } catch(e) {}
     el("url").value=""; el("theme").value="";
     el("analyze-btn").disabled = true;
     hide("step-results"); hide("step-loading"); show("step-input");
     window.scrollTo({ top:0, behavior:"smooth" });
   }
+
+  // Lien direct : ?site=domaine lance l'analyse dès l'ouverture de la page.
+  // Avec &rapport=complet, le rapport s'affiche sans demande d'adresse.
+  (function(){
+    var q;
+    try { q = new URLSearchParams(window.location.search); } catch(e) { return; }
+    var s = (q.get("site") || "").trim();
+    if(!s) return;
+    accesDirect = q.get("rapport") === "complet";
+    el("url").value = s;
+    el("analyze-btn").disabled = false;
+    analyser();
+  })();
 </script>
 </body>
 </html>
