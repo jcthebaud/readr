@@ -154,6 +154,8 @@
 
   .veil{ filter:blur(6px); opacity:.45; pointer-events:none; user-select:none; }
   #rapport.robots-seuls .mes{ display:none !important; }
+  #rapport .rs{ display:none; }
+  #rapport.robots-seuls .rs{ display:inline; }
   #rapport{ transition:filter .35s ease, opacity .35s ease; }
 
   .mode{ margin-top:14px; font-size:13px; display:inline-flex; align-items:center; gap:8px;
@@ -467,7 +469,7 @@
       <div id="r-constats" class="mes"></div>
       <div id="r-malus" class="mes"></div>
 
-      <h2>Vos robots et vos canaux</h2>
+      <h2><span class="mes">Vos robots et vos canaux</span><span class="rs">Vos robots IA</span></h2>
       <div class="robots" id="r-robots-block">
         <div class="robots-head"><span class="robots-title">Robots IA déclarés dans votre robots.txt</span>
           <span class="measured">Donnée vérifiée</span></div>
@@ -501,8 +503,8 @@
         <p class="offre-p">Readr est une agence indépendante spécialisée sur les médias et l'abonnement.
           Nous intervenons sur ce qui vous appartient : stratégie CRM et marketing automation, offre de
           newsletters, parcours de connexion et d'abonnement, acquisition diversifiée, exploitation de vos
-          données. Une partie des correctifs ci-dessus relève de votre équipe technique ou de votre
-          rédaction. La transformation de votre audience en base d'abonnés, c'est notre métier.</p>
+          données. <span class="mes">Une partie des correctifs ci-dessus relève de votre équipe technique ou de
+          votre rédaction.</span> La transformation de votre audience en base d'abonnés, c'est notre métier.</p>
         <div class="offre-l">
           <a href="https://www.readr.agency/rendezvous" target="_blank" rel="noopener">Prendre rendez-vous</a>
           <a href="https://www.readr.agency/" target="_blank" rel="noopener">readr.agency</a>
