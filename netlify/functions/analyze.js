@@ -491,7 +491,7 @@ function analyserPage(htmlComplet) {
   if (paras.length > 1 && titrePage.length >= 20) {
     const p0 = normaliser(paras[0]);
     if (p0 === titrePage || titrePage.indexOf(p0) !== -1
-        || (p0.indexOf(titrePage) === 0 && p0.length <= titrePage.length + 20)) {
+        || (p0.indexOf(titrePage) !== -1 && p0.length <= titrePage.length + 40)) {
       paras = paras.slice(1);
     }
   }
@@ -557,6 +557,15 @@ function niveau(compte, total) {
   if (part >= 0.7) return "present";
   if (part >= 0.25) return "partiel";
   return "absent";
+}
+
+// Retire d'une page son bloc <article> le plus long, pour n'en garder que l'habillage.
+function horsArticle(html) {
+  const articles = html.match(/<article[\s\S]*?<\/article>/gi) || [];
+  if (!articles.length) return html;
+  const plusLong = articles.sort(function (a, b) { return b.length - a.length; })[0];
+  const debut = html.indexOf(plusLong);
+  return debut === -1 ? html : html.slice(0, debut) + " " + html.slice(debut + plusLong.length);
 }
 
 // Taille de l'echantillon. Les requetes partent en parallele : tester davantage de
@@ -626,9 +635,13 @@ async function lireSite(origin, rep, plan, origineCanon) {
   const pages = candidates.slice(0, NB_ARTICLES_RETENUS);
   const pagesMurees = pages.filter(function (x) { return x.mesures.mur; }).length;
 
-  if (!pages.length) {
+  // Un ou deux articles arraches a un site qui refuse presque toutes nos requetes ne
+  // font pas un echantillon : on prefere ne rien noter (lepoint.fr, 1 page lue sur 12).
+  const tropPeu = pages.length > 0 && pages.length < 3 && atteintes < urls.length / 2;
+
+  if (!pages.length || tropPeu) {
     let motif = "aucune page article identifiee";
-    if (!atteintes) motif = "pages inaccessibles";
+    if (!atteintes || tropPeu) motif = "pages inaccessibles";
     else if (murs >= Math.max(1, Math.round(atteintes / 2))) motif = "contenu reserve";
     else if (coquilles >= Math.max(1, Math.round(atteintes / 2))) motif = "contenu charge par le navigateur";
     return {
@@ -645,8 +658,11 @@ async function lireSite(origin, rep, plan, origineCanon) {
   // Entete et pied de page figurent aussi sur les articles : sans accueil, on les y lit.
   // Chaque page est lue separement et un signal vu une fois est acquis : le resultat ne
   // depend plus de l'ordre dans lequel les pages ont ete lues.
+  // Une page article se lit ici sans le corps de l'article : l'en-tete, le pied de page et
+  // les encarts portent l'offre du media, alors que le texte peut citer l'application ou
+  // la newsletter d'un tiers.
   const lues = (accueil ? [accueil] : [])
-    .concat(reps.filter(function (x) { return x; }).slice(0, 6).map(function (x) { return x.html; }));
+    .concat(reps.filter(function (x) { return x; }).slice(0, 6).map(function (x) { return horsArticle(x.html); }));
   const audience = lues.map(analyserAudience).reduce(function (a, b) {
     return {
       newsletter: a.newsletter || b.newsletter, formulaireEmail: a.formulaireEmail || b.formulaireEmail,
