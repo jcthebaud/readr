@@ -65,17 +65,35 @@ function viaProxy(u) {
 // Journal des echecs, remonte au rapport pour rendre toute panne explicable.
 const JOURNAL = [];
 
+// Echeance globale d'une analyse. Netlify coupe la fonction a 10 secondes : chaque
+// requete reseau est donc bornee par le temps qui reste, pour toujours rendre un rapport.
+let ECHEANCE = 0;
+function resteMs() {
+  return ECHEANCE ? Math.max(0, ECHEANCE - Date.now()) : 60000;
+}
+
+// Nom d'hote sans "www." : lemonde.fr et www.lemonde.fr designent le meme site.
+// Comparer les origines telles quelles ecartait a tort tout le plan de site d'un media
+// saisi sans "www".
+function hoteNu(u) {
+  try { return new URL(u).hostname.replace(/^www\./i, "").toLowerCase(); } catch (e) { return ""; }
+}
+
 async function tenter(u, ms, entetes) {
+  ms = Math.min(ms, resteMs());
+  if (ms < 250) return { ok: false, motif: "delai depasse" };
   const ctrl = new AbortController();
   const timer = setTimeout(function () { ctrl.abort(); }, ms);
   try {
     const cible = viaProxy(u);
     const r = await fetch(cible, { signal: ctrl.signal, redirect: "follow", headers: entetes });
-    clearTimeout(timer);
-    if (!r.ok) return { ok: false, motif: "HTTP " + r.status };
+    if (!r.ok) { clearTimeout(timer); return { ok: false, motif: "HTTP " + r.status }; }
     const ct = r.headers.get("content-type") || "";
-    if (ct && ct.indexOf("html") === -1) return { ok: false, motif: "type " + ct.split(";")[0] };
+    if (ct && ct.indexOf("html") === -1) { clearTimeout(timer); return { ok: false, motif: "type " + ct.split(";")[0] }; }
+    // Le delai couvre aussi la lecture du corps : une page servie au compte-gouttes
+    // ne doit pas faire depasser la limite de la fonction.
     const brut = await r.text();
+    clearTimeout(timer);
     // On conserve le debut et la fin : le pied de page porte les liens utiles.
     const txt = brut.length > 900000 ? brut.slice(0, 600000) + " " + brut.slice(-300000) : brut;
     // Sous proxy, r.url pointe le service : on conserve l'adresse demandee comme finale.
@@ -138,6 +156,12 @@ function texteVisible(html) {
   ).replace(/\s+/g, " ").trim();
 }
 
+// Texte ramene a ses lettres et chiffres, pour comparer deux passages sans tenir
+// compte de la ponctuation ni de la casse.
+function normaliser(t) {
+  return String(t || "").toLowerCase().replace(/[^a-z0-9à-ÿ]+/g, " ").trim();
+}
+
 
 // --------- Isolement du corps de l'article ---------
 // Les menus, entetes et pieds de page faussent toutes les mesures : sur un grand
@@ -185,48 +209,89 @@ function corpsArticle(html) {
   return { corps: sansBruit(html), source: "page entiere" };
 }
 
+// Le mot exclu doit constituer un SEGMENT ENTIER du chemin.
+// Sans cela, un article intitule "auteur-mystere-revele" etait ecarte a tort.
+// "rubrique" n'est volontairement pas exclu : sur de nombreux sites de presse
+// francais, /rubrique/ est le prefixe des articles eux-memes.
+const CHEMINS_EXCLUS = /\/(tag|tags|category|categories|categorie|auteur|auteurs|author|authors|page|abonnement|abonnez|newsletter|newsletters|contact|mentions|cgv|cgu|privacy|cookies|login|connexion|compte|recherche|search|rss|feed|sitemap|plan-du-site)(\/|$|\?)/i;
+const FICHIERS_EXCLUS = /\.(jpg|jpeg|png|gif|svg|webp|pdf|zip|mp3|mp4|xml|json|css|js)(\?|$)/i;
+
+// Pages de service logees a la racine du site (mentions legales, charte, rapport
+// d'activite). Elles portent du texte et une date, mais ce ne sont pas des articles :
+// sur mediapart.fr, elles etaient mesurees a la place des articles.
+const PAGES_SERVICE = /^(mentions-legales|charte[a-z0-9-]*|conditions-[a-z0-9-]+|politique-de-[a-z0-9-]+|donnees-personnelles|confidentialite|qui-sommes-nous|a-propos|nous-contacter|aide|faq|recrutement|publicite|rapport-d-activite[a-z0-9-]*|accessibilite|espace-presse|partenaires|credits)(\.html?|\.php)?$/i;
+
+// Classe une adresse du site : 3 = article quasi certain (date ou identifiant dans le
+// chemin), 2 = slug d'article plausible, 1 = candidat de repli, 0 = a ecarter.
+function forceArticle(abs) {
+  let u;
+  try { u = new URL(abs); } catch (e) { return 0; }
+  if (CHEMINS_EXCLUS.test(abs) || FICHIERS_EXCLUS.test(abs)) return 0;
+  const chemin = u.pathname;
+  const segments = chemin.split("/").filter(Boolean);
+  if (!segments.length) return 0;
+  const dernier = segments[segments.length - 1];
+  if (segments.length === 1 && PAGES_SERVICE.test(dernier)) return 0;
+
+  const slug = dernier.indexOf("-") !== -1 && dernier.length >= 10;
+  const date = /\/(19|20)\d{2}\//.test(chemin);
+  const identifiant = /\d{5,}/.test(dernier);
+  const fichier = /\.(html?|php)$/i.test(dernier);
+  if (chemin.length >= 10 && (date || identifiant || (fichier && slug))) return 3;
+
+  // Un slug seul a la racine, termine par "/", est le plus souvent une rubrique ou un
+  // dossier ("/guerre-au-proche-orient/") : il ne passe qu'en candidat de repli.
+  const rubriqueProbable = segments.length === 1 && /\/$/.test(chemin);
+  if (chemin.length >= 10 && (slug || /\d{4,}/.test(dernier))) return rubriqueProbable ? 1 : 2;
+  if (segments.length >= 2 && chemin.length >= 8) return 1;
+  return 0;
+}
+
 // Cherche des liens d'articles plausibles sur la page d'accueil.
-function trouverArticles(html, origin) {
-  // Le mot exclu doit constituer un SEGMENT ENTIER du chemin.
-  // Sans cela, un article intitule "auteur-mystere-revele" etait ecarte a tort.
-  // "rubrique" n'est volontairement pas exclu : sur de nombreux sites de presse
-  // francais, /rubrique/ est le prefixe des articles eux-memes.
-  const exclus = /\/(tag|tags|category|categories|categorie|auteur|auteurs|author|authors|page|abonnement|abonnez|newsletter|newsletters|contact|mentions|cgv|cgu|privacy|cookies|login|connexion|compte|recherche|search|rss|feed|sitemap|plan-du-site)(\/|$|\?)/i;
-  const forts = [];   // chemins qui ressemblent nettement a un article
-  const faibles = []; // candidats de repli
+function trouverArticles(html, origin, max) {
+  const limite = max || 12;
+  const hote = hoteNu(origin);
 
-  const re = /<a\s[^>]*href=["']([^"'#]+)["']/gi;
-  let m;
-  while ((m = re.exec(html)) !== null && (forts.length + faibles.length) < 300) {
-    let href = m[1];
-    if (!href || href.indexOf("mailto:") === 0 || href.indexOf("javascript:") === 0) continue;
-    let abs;
-    try { abs = new URL(href, origin).href; } catch (e) { continue; }
-    if (abs.indexOf(origin) !== 0) continue;
-    if (exclus.test(abs)) continue;
-    if (/\.(jpg|jpeg|png|gif|svg|webp|pdf|zip|mp3|mp4|xml|json|css|js)(\?|$)/i.test(abs)) continue;
-
-    const chemin = abs.slice(origin.length).split("?")[0];
-    const segments = chemin.split("/").filter(Boolean);
-    if (!segments.length) continue;
-    const dernier = segments[segments.length - 1];
-
-    // Signature nette d'un article : slug avec tirets, ou identifiant numerique, ou date dans l'URL
-    const slug = dernier.indexOf("-") !== -1 && dernier.length >= 10;
-    const identifiant = /\d{4,}/.test(dernier);
-    const date = /\/(19|20)\d{2}\//.test(chemin);
-
-    if ((slug || identifiant || date) && chemin.length >= 10) {
-      if (forts.indexOf(abs) === -1) forts.push(abs);
-    } else if (segments.length >= 2 && chemin.length >= 8) {
-      if (faibles.indexOf(abs) === -1) faibles.push(abs);
+  const releve = function (source) {
+    const niveaux = { 3: [], 2: [], 1: [] };
+    const vus = {};
+    const re = /<a\s[^>]*href=["']([^"'#]+)["']/gi;
+    let m, lus = 0;
+    while ((m = re.exec(source)) !== null && lus < 600) {
+      lus++;
+      const href = m[1];
+      if (!href || href.indexOf("mailto:") === 0 || href.indexOf("javascript:") === 0) continue;
+      let u;
+      try { u = new URL(decodeEntites(href), origin); } catch (e) { continue; }
+      if (hoteNu(u.href) !== hote) continue;
+      const force = forceArticle(u.href);
+      if (!force) continue;
+      // Les parametres de suivi ne font pas partie de l'adresse d'un article.
+      const adresse = force >= 2 ? (u.origin + u.pathname) : u.href;
+      if (vus[adresse]) continue;
+      vus[adresse] = true;
+      niveaux[force].push(adresse);
     }
+    return niveaux;
+  };
+
+  // Les menus et le pied de page alignent des rubriques et des pages de service avant
+  // le premier article : sur lemonde.fr, les douze premiers liens "nets" etaient tous
+  // des dossiers. On lit donc d'abord la page sans sa navigation.
+  const sansNavigation = html
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ");
+  let n = releve(sansNavigation);
+  if (n[3].length + n[2].length < 6) {
+    const complet = releve(html);
+    if (complet[3].length + complet[2].length > n[3].length + n[2].length) n = complet;
   }
 
   // On privilegie les candidats nets, puis on complete avec les replis.
   // On demande plus de candidats que necessaire : les pages lourdes ou protegees
   // echouent souvent, et les requetes etant paralleles, le surcout de temps est nul.
-  return forts.concat(faibles).slice(0, 12);
+  return n[3].concat(n[2], n[1]).slice(0, limite);
 }
 
 // Analyse une page article et en extrait les signaux mesurables.
@@ -391,9 +456,22 @@ function analyserPage(htmlComplet) {
   res.titresQuestion = titres.filter(function (t) { return t.indexOf("?") !== -1; }).length;
 
   // Paragraphes : longueur et extractibilite
-  const paras = (corps.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || [])
+  // La balise doit etre exactement <p>. L'ancien motif "<p[^>]*>" attrapait aussi
+  // <picture> et <path> : le "premier paragraphe" commencait alors par les boutons de
+  // partage, le credit photo ou le titre (livreshebdo.fr, challenges.fr).
+  let paras = (corps.match(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/gi) || [])
     .map(function (t) { return texteVisible(t); })
     .filter(function (t) { return t.split(/\s+/).length >= 8; });
+
+  // Un titre repris dans une balise <p> n'est pas un paragraphe d'ouverture.
+  const titrePage = normaliser(texteVisible((html.match(/<h1(?:\s[^>]*)?>[\s\S]*?<\/h1>/i) || [""])[0]));
+  if (paras.length > 1 && titrePage.length >= 20) {
+    const p0 = normaliser(paras[0]);
+    if (p0 === titrePage || titrePage.indexOf(p0) !== -1
+        || (p0.indexOf(titrePage) === 0 && p0.length <= titrePage.length + 20)) {
+      paras = paras.slice(1);
+    }
+  }
 
   res.parasUtiles = paras.length;
   if (paras.length) {
@@ -456,27 +534,38 @@ function niveau(compte, total) {
   return "absent";
 }
 
-async function lireSite(origin, urlsSecours) {
-  const rep = await getHTML(origin, 5000);
+// Taille de l'echantillon. Les requetes partent en parallele : tester davantage de
+// pages ne coute pas de temps, et mesurer plus d'articles stabilise le score.
+const NB_PAGES_TESTEES = 12;
+const NB_COMPLEMENT_ACCUEIL = 4;
+const NB_ARTICLES_RETENUS = 8;
 
-  // Accueil inaccessible : on se rabat sur les adresses du plan de site.
-  if (!rep) {
-    if (!urlsSecours || !urlsSecours.length) {
-      return { dispo: false, raison: "page d'accueil illisible" };
-    }
+// rep : page d'accueil deja lue (ou null). plan : articles releves dans les plans de site.
+async function lireSite(origin, rep, plan, origineCanon) {
+  const urlsPlan = ((plan && plan.urls) || []).slice(0, NB_PAGES_TESTEES);
+
+  // Ni accueil ni plan de site : il n'y a rien a lire.
+  if (!rep && !urlsPlan.length) {
+    return { dispo: false, raison: "page d'accueil illisible", originFinal: origineCanon || origin };
   }
 
   const accueil = rep ? rep.html : "";
-  let originFinal = origin;
+  let originFinal = origineCanon || origin;
   if (rep) { try { originFinal = new URL(rep.urlFinale).origin; } catch (e) {} }
 
-  // Le plan de site, quand il est fourni, prime : il liste de vrais articles, la ou
-  // une page d'accueil rendue en JavaScript ne livre souvent que des liens de rubrique.
+  // Le plan de site prime : il liste de vrais articles, dates, la ou une page d'accueil
+  // ne livre souvent que des liens de rubrique. Quelques liens de l'accueil completent
+  // l'echantillon, pour ne pas dependre d'un plan de site mal tenu.
   // La page d'accueil reste lue par ailleurs, pour les signaux d'audience en propre.
-  let urls = (urlsSecours && urlsSecours.length)
-    ? urlsSecours.slice(0, 12)
-    : (rep ? trouverArticles(accueil, originFinal) : []);
-  // En parallele : douze pages coutent le meme temps qu'une seule.
+  const urls = urlsPlan.slice();
+  const quota = urlsPlan.length ? Math.max(NB_COMPLEMENT_ACCUEIL, NB_PAGES_TESTEES - urlsPlan.length) : NB_PAGES_TESTEES;
+  if (rep) {
+    let ajoutes = 0;
+    trouverArticles(accueil, originFinal, NB_PAGES_TESTEES).forEach(function (u) {
+      if (ajoutes < quota && urls.indexOf(u) === -1) { urls.push(u); ajoutes++; }
+    });
+  }
+  // En parallele : seize pages coutent le meme temps qu'une seule.
   const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 4000); }));
 
   let atteintes = 0, murs = 0, coquilles = 0;
@@ -488,15 +577,17 @@ async function lireSite(origin, urlsSecours) {
     if (mes.mur && mes.mots < 400) murs++;
     if (mes.coquille) coquilles++;
     if (!estUnArticle(mes)) return;                  // rubrique, accueil, page de service
-    candidates.push({ url: urls[i], mesures: mes, extrait: texteVisible(h.html).slice(0, 450) });
+    candidates.push({ url: urls[i], duPlan: i < urlsPlan.length, mesures: mes,
+                      extrait: texteVisible(h.html).slice(0, 450) });
   });
 
-  // On privilegie les pages balisees, puis les plus fournies, et on en garde cinq.
+  // On privilegie les pages balisees, puis celles du plan de site, puis les plus fournies.
   candidates.sort(function (a, b) {
     if (a.mesures.schemaArticle !== b.mesures.schemaArticle) return a.mesures.schemaArticle ? -1 : 1;
+    if (a.duPlan !== b.duPlan) return a.duPlan ? -1 : 1;
     return b.mesures.mots - a.mesures.mots;
   });
-  const pages = candidates.slice(0, 5);
+  const pages = candidates.slice(0, NB_ARTICLES_RETENUS);
   const pagesMurees = pages.filter(function (x) { return x.mesures.mur; }).length;
 
   if (!pages.length) {
@@ -510,6 +601,7 @@ async function lireSite(origin, urlsSecours) {
       nbMurs: murs,
       nbCoquilles: coquilles,
       nbPages: 0, nbTentees: urls.length, nbAtteintes: atteintes, originFinal: originFinal,
+      nbDuPlan: urlsPlan.length,
     };
   }
 
@@ -550,9 +642,12 @@ async function lireSite(origin, urlsSecours) {
     a.sourcesPrimaires += m.sourcesPrimaires;
     if (m.paraMoyen) { a.paraSomme += m.paraMoyen; a.paraCount += 1; }
     if (m.passageNote > a.meilleureNote) { a.meilleureNote = m.passageNote; a.passage = m.passage; }
-    if (!a.ouverture && m.ouverture) {
+    // L'exemple affiche doit rester coherent avec la note : si un paragraphe d'ouverture
+    // a valu les points du critere, c'est lui que l'on montre, pas celui d'un autre article.
+    if (m.ouverture && (!a.ouverture || (m.ouvertureDirecte && !a.ouvertureExemplaire))) {
       a.ouverture = m.ouverture; a.ouvertureMots = m.ouvertureMots;
       a.ouvertureChiffre = m.ouvertureChiffre; a.ouvertureRenvoi = m.ouvertureRenvoi;
+      a.ouvertureExemplaire = !!m.ouvertureDirecte;
     }
     return a;
   }, { schemaArticle:0, schemaAuteur:0, schemaDatePub:0, schemaDateMaj:0, auteurVisible:0,
@@ -562,6 +657,7 @@ async function lireSite(origin, urlsSecours) {
        noindex:0, nosnippet:0, snippetZero:0, paywall:0, h1Unique:0, sautNiveau:0,
        sameAs:0, breadcrumb:0, auteurTexte:0,
        ouverture:"", ouvertureMots:0, ouvertureChiffre:false, ouvertureRenvoi:false,
+       ouvertureExemplaire:false,
        schemaNews:0, pageAuteur:0, genreDeclare:0, citations:0, sourcesPrimaires:0 });
 
   return {
@@ -569,6 +665,9 @@ async function lireSite(origin, urlsSecours) {
     nbPages: n,
     nbTentees: urls.length,
     viaPlanDeSite: !rep,
+    // D'ou viennent les articles mesures : plan news, plan de site ou page d'accueil.
+    sourceArticles: pages.some(function (x) { return x.duPlan; }) ? ((plan && plan.source) || "plan de site") : "accueil",
+    nbDuPlan: pages.filter(function (x) { return x.duPlan; }).length,
     nbAtteintes: atteintes,
     nbBalisees: pages.filter(function (x) { return x.mesures.schemaArticle; }).length,
     nbMurees: pagesMurees,
@@ -626,75 +725,177 @@ async function lireSite(origin, urlsSecours) {
 
 
 
-// --------- Plan de site : voie de secours quand l'accueil est inaccessible ---------
-// Les protections anti-robots visent surtout la page d'accueil. Le plan de site
-// reste souvent servi, et il liste les articles recents.
+// --------- Plans de site : la source la plus sure d'articles recents ---------
+// Le plan news liste les articles des derniers jours avec leur date de publication.
+// Les plans declares dans le robots.txt passent avant les emplacements usuels, et le
+// plan news avant les autres. L'echantillon est donc toujours le meme a un instant
+// donne : les articles les plus recents, tries par date.
+
+// Lit le corps d'une reponse sans depasser une taille donnee : certains plans de site
+// pesent plusieurs dizaines de mega-octets.
+async function lireTexte(r, max, gzip) {
+  let flux = r.body;
+  if (!flux) return (await r.text()).slice(0, max);
+  if (gzip && typeof DecompressionStream !== "undefined") {
+    flux = flux.pipeThrough(new DecompressionStream("gzip"));
+  }
+  const lecteur = flux.getReader();
+  const decodeur = new TextDecoder("utf-8");
+  let texte = "";
+  while (texte.length < max) {
+    const bloc = await lecteur.read();
+    if (bloc.done) break;
+    texte += decodeur.decode(bloc.value, { stream: true });
+  }
+  try { await lecteur.cancel(); } catch (e) {}
+  return texte.slice(0, max);
+}
 
 async function getXML(u, ms) {
+  const delai = Math.min(ms || 3000, resteMs());
+  if (delai < 250) return null;
   const ctrl = new AbortController();
-  const timer = setTimeout(function () { ctrl.abort(); }, ms || 4000);
+  const timer = setTimeout(function () { ctrl.abort(); }, delai);
   try {
     const r = await fetch(viaProxy(u), { signal: ctrl.signal, redirect: "follow", headers: UA_NAVIGATEUR });
+    if (!r.ok) { clearTimeout(timer); return null; }
+    const gzip = /\.gz(\?|$)/i.test(u) && !/gzip/i.test(r.headers.get("content-encoding") || "");
+    const t = await lireTexte(r, 2000000, gzip);
     clearTimeout(timer);
-    if (!r.ok) return null;
-    const t = await r.text();
-    return t.slice(0, 400000);
+    return t;
   } catch (e) {
     clearTimeout(timer);
     return null;
   }
 }
 
-function urlsDuPlan(xml, origin) {
+// Releve les entrees d'un plan de site ou d'un index de plans : adresse, date
+// (publication news, a defaut derniere modification) et presence du balisage news.
+function entreesDuPlan(xml) {
   if (!xml) return [];
-  return (xml.match(/<loc>\s*([^<\s]+)\s*<\/loc>/gi) || [])
-    .map(function (m) { return m.replace(/<\/?loc>/gi, "").trim(); })
-    .filter(function (u) { return u.indexOf(origin) === 0; });
+  const maintenant = Date.now();
+  const res = [];
+  const lire = function (b) {
+    const loc = (b.match(/<loc>\s*(?:<!\[CDATA\[\s*)?([^<\]\s]+)/i) || [])[1];
+    if (!loc) return;
+    const d = (b.match(/<news:publication_date>\s*([^<\s]+)/i) || b.match(/<lastmod>\s*([^<\s]+)/i) || [])[1];
+    let t = d ? Date.parse(d) : NaN;
+    // Une date illisible ou placee dans le futur ne sert pas au tri.
+    if (isNaN(t) || t > maintenant + 86400000) t = 0;
+    res.push({ url: decodeEntites(loc), t: t, news: /<news:/i.test(b) });
+  };
+  const blocs = xml.match(/<(url|sitemap)[\s>][\s\S]*?<\/\1>/gi);
+  if (blocs && blocs.length) blocs.forEach(lire);
+  else (xml.match(/<loc>[\s\S]*?<\/loc>/gi) || []).forEach(lire);
+  return res;
 }
 
-// Retient les adresses qui ressemblent a des articles, les plus recentes d'abord.
-function articlesDeXml(xml, origin) {
-  if (!xml) return [];
-  if (/<sitemapindex/i.test(xml)) return [];   // index de plans : traite plus bas
-  return urlsDuPlan(xml, origin)
-    .filter(function (u) {
-      const chemin = u.slice(origin.length);
-      return chemin.length >= 12 && (/-/.test(chemin) || /\d{4,}/.test(chemin));
-    })
-    .slice(-12).reverse();
-}
+// Retient les adresses d'articles du site, les plus recentes d'abord.
+function articlesDesEntrees(entrees, origin, max) {
+  const hote = hoteNu(origin);
+  const bons = entrees.filter(function (e) {
+    if (hoteNu(e.url) !== hote) return false;
+    if (e.news) return !CHEMINS_EXCLUS.test(e.url) && !FICHIERS_EXCLUS.test(e.url);
+    let chemin = "";
+    try { chemin = new URL(e.url).pathname; } catch (err) { return false; }
+    return forceArticle(e.url) >= 1 && chemin.length >= 12 && (/-/.test(chemin) || /\d{4,}/.test(chemin));
+  });
+  if (!bons.length) return [];
 
-// Cherche les plans de site declares dans le robots.txt, puis les emplacements usuels.
-async function articlesDuPlanDeSite(origin, robotsTxt) {
-  const candidats = [];
-  if (robotsTxt) {
-    (robotsTxt.match(/^\s*sitemap\s*:\s*(\S+)/gim) || []).forEach(function (l) {
-      const u = l.split(/:\s*/).slice(1).join(":").trim();
-      if (u.indexOf(origin) === 0) candidats.push(u);
-    });
+  const vus = {};
+  const uniques = function (liste) {
+    return liste.filter(function (e) { if (vus[e.url]) return false; vus[e.url] = true; return true; });
+  };
+
+  // Plan date : les plus recents d'abord. Le tri est stable, l'ordre du plan departage.
+  const dates = bons.filter(function (e) { return e.t > 0; });
+  if (dates.length >= Math.min(bons.length, 6)) {
+    return uniques(dates.sort(function (a, b) { return b.t - a.t; })).slice(0, max)
+      .map(function (e) { return e.url; });
   }
-  ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml", "/sitemap-news.xml"]
-    .forEach(function (c) { if (candidats.indexOf(origin + c) === -1) candidats.push(origin + c); });
+  // Sans date, les plans rangent en general les nouveautes a la fin.
+  return uniques(bons.slice().reverse()).slice(0, max).map(function (e) { return e.url; });
+}
 
-  for (let i = 0; i < Math.min(candidats.length, 2); i++) {
-    const xml = await getXML(candidats[i], 3000);
-    if (!xml) continue;
-    let urls = urlsDuPlan(xml, origin);
-    if (!urls.length) continue;
+// Dans un index de plans, choisit celui qui a le plus de chances de lister les
+// articles recents : un plan news, sinon le plus recemment modifie, sinon le dernier.
+function choisirSousPlan(entrees, origin) {
+  const hote = hoteNu(origin);
+  const duSite = entrees.filter(function (e) {
+    const h = hoteNu(e.url);
+    return h === hote || h.slice(-(hote.length + 1)) === "." + hote;
+  });
+  if (!duSite.length) return "";
+  const news = duSite.filter(function (e) { return /news|actu/i.test(e.url); });
+  if (news.length) return news[0].url;
+  const utiles = duSite.filter(function (e) {
+    return !/video|image|img|photo|tag|categor|auteur|author|archive/i.test(e.url);
+  });
+  const liste = utiles.length ? utiles : duSite;
+  const dates = liste.filter(function (e) { return e.t > 0; });
+  if (dates.length) return dates.sort(function (a, b) { return b.t - a.t; })[0].url;
+  return liste[liste.length - 1].url;
+}
 
-    // Si c'est un index de plans, on ouvre le plus recent.
-    if (/<sitemapindex/i.test(xml)) {
-      const sous = await getXML(urls[urls.length - 1], 3000);
-      urls = urlsDuPlan(sous, origin);
+// Plans a essayer, dans l'ordre : ceux du robots.txt (plan news en tete), puis les
+// emplacements usuels.
+function plansCandidats(origin, robotsTxt) {
+  const hote = hoteNu(origin);
+  const declares = [];
+  (String(robotsTxt || "").match(/^\s*sitemap\s*:\s*(\S+)/gim) || []).forEach(function (l) {
+    const u = l.replace(/^\s*sitemap\s*:\s*/i, "").trim();
+    const h = hoteNu(u);
+    const memeDomaine = h === hote || h.slice(-(hote.length + 1)) === "." + hote;
+    if (memeDomaine && declares.indexOf(u) === -1) declares.push(u);
+  });
+  const poids = function (u) {
+    let p = 10;
+    if (/news|actu/i.test(u)) p -= 6;
+    if (/index/i.test(u)) p += 1;
+    if (/video|image|img|photo|tag|categor|auteur|author|archive|\/en\//i.test(u)) p += 8;
+    return p;
+  };
+  declares.sort(function (a, b) { return poids(a) - poids(b); });
+  const tous = declares.slice();
+  ["/sitemap_news.xml", "/sitemap-news.xml", "/news-sitemap.xml", "/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml"]
+    .forEach(function (c) { if (tous.indexOf(origin + c) === -1) tous.push(origin + c); });
+  return tous;
+}
+
+// Cherche des articles recents dans les plans de site, sans depasser l'heure limite :
+// le temps passe ici est pris sur celui de la lecture des articles.
+async function articlesDesPlans(origin, robotsTxt, limite) {
+  const essais = [];
+  const court = function (u) { return u.replace(/^https?:\/\/[^\/]+/i, "").slice(0, 60); };
+  const delai = function () { return Math.min(3000, limite - Date.now()); };
+  const candidats = plansCandidats(origin, robotsTxt);
+  let repli = null;
+
+  const explorer = async function (lot) {
+    const xmls = await Promise.all(lot.map(function (u) { return getXML(u, delai()); }));
+    for (let i = 0; i < lot.length; i++) {
+      if (!xmls[i]) { essais.push(court(lot[i]) + " : illisible"); continue; }
+      let entrees = entreesDuPlan(xmls[i]);
+      let news = /news|actu/i.test(lot[i]);
+      if (/<sitemapindex/i.test(xmls[i])) {
+        const sous = choisirSousPlan(entrees, origin);
+        if (!sous) { essais.push(court(lot[i]) + " : index sans plan du site"); continue; }
+        entrees = entreesDuPlan(await getXML(sous, delai()));
+        news = news || /news|actu/i.test(sous);
+        essais.push(court(lot[i]) + " : index, plan retenu " + court(sous));
+      }
+      const urls = articlesDesEntrees(entrees, origin, NB_PAGES_TESTEES);
+      const source = (news || entrees.some(function (e) { return e.news; })) ? "plan news" : "plan de site";
+      essais.push(court(lot[i]) + " : " + urls.length + " " + (urls.length >= 2 ? "articles" : "article"));
+      if (urls.length >= 4) return { urls: urls, source: source, essais: essais };
+      if (urls.length && (!repli || urls.length > repli.urls.length)) repli = { urls: urls, source: source, essais: essais };
     }
-    // On garde les adresses qui ressemblent a des articles, les plus recentes d'abord.
-    const articles = urls.filter(function (u) {
-      const chemin = u.slice(origin.length);
-      return chemin.length >= 12 && (/-/.test(chemin) || /\d{4,}/.test(chemin));
-    });
-    if (articles.length) return articles.slice(-12).reverse();
-  }
-  return [];
+    return null;
+  };
+
+  let trouve = await explorer(candidats.slice(0, 3));
+  if (!trouve && delai() > 1200) trouve = await explorer(candidats.slice(3, 6));
+  return trouve || repli || { urls: [], source: "", essais: essais };
 }
 
 // --------- Mesure de l'independance vis-a-vis des plateformes ---------
@@ -834,9 +1035,13 @@ async function readRobots(siteUrl) {
       headers: UA_READR,
     });
     clearTimeout(timer);
-    if (!r.ok) return { dispo: false, joignable: true, raison: "robots.txt inaccessible (HTTP " + r.status + ")" };
+    // Adresse reellement servie apres redirection (lemonde.fr vers www.lemonde.fr) :
+    // c'est elle qui sert ensuite a chercher les plans de site.
+    let origineFinale = origin;
+    try { if (r.url) origineFinale = new URL(r.url).origin; } catch (e) {}
+    if (!r.ok) return { dispo: false, joignable: true, origineFinale: origineFinale, raison: "robots.txt inaccessible (HTTP " + r.status + ")" };
     const txt = (await r.text()).slice(0, 200000);
-    if (!/user-agent/i.test(txt)) return { dispo: false, joignable: true, raison: "robots.txt vide ou non standard" };
+    if (!/user-agent/i.test(txt)) return { dispo: false, joignable: true, origineFinale: origineFinale, texte: txt.slice(0, 20000), raison: "robots.txt vide ou non standard" };
 
     const groups = parseRobots(txt);
     const brutRobots = txt;
@@ -858,6 +1063,7 @@ async function readRobots(siteUrl) {
 
     return {
       dispo: true,
+      origineFinale: origineFinale,
       etat: etat,
       bots: bots,
       nbBloques: bloques.length,
@@ -887,7 +1093,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-08-24 / v12 : detection app mobile elargie (redirecteurs, page et intitules de telechargement), rapport extractif";
+const VERSION = "2026-11-26 / v13 : plans de site declares et plan news date, adresse canonique, echantillon elargi, paragraphes mieux isoles";
 
 // ============================================================
 //  TEXTES DU RAPPORT
@@ -1405,35 +1611,33 @@ exports.handler = async function (event) {
     const u = new URL(url);
     origin = u.origin; host = u.hostname;
   } catch (e) {
-    return json(400, { error: "Adresse invalide. Indiquez un domaine complet, par exemple economist.com" });
+    return json(400, { error: "Adresse invalide. Indiquez un domaine complet, par exemple votremedia.fr" });
   }
   if (!domaineValide(host)) {
-    return json(400, { error: "Adresse incomplète. Indiquez le domaine avec son extension, par exemple economist.com" });
+    return json(400, { error: "Adresse incomplète. Indiquez le domaine avec son extension, par exemple votremedia.fr" });
   }
 
-  // Tout est lancé en parallèle : robots.txt, page d'accueil et plan de site.
-  // Le plan de site ne sert que si l'accueil est bloqué, mais le demander d'emblée
-  // évite d'ajouter son délai à celui de l'accueil.
-  let [robots, site, planXml] = await Promise.all([
-    readRobots(url),
-    lireSite(origin),
-    getXML(origin + "/sitemap.xml", 3500),
+  // Echeance globale : tout doit etre rendu avant la limite de dix secondes de Netlify.
+  const debut = Date.now();
+  ECHEANCE = debut + 9000;
+
+  // Le robots.txt et la page d'accueil partent ensemble.
+  const lectureRobots = readRobots(url);
+  const lectureAccueil = getHTML(origin, 5000);
+  const robots = await lectureRobots;
+
+  // Les plans de site se cherchent sur l'adresse reellement servie (avec ou sans "www"),
+  // pendant que l'accueil finit de se charger. Leur recherche est bornee dans le temps,
+  // pour laisser quatre secondes a la lecture des articles.
+  const origineCanon = (robots && robots.origineFinale) || origin;
+  const [accueil, plan] = await Promise.all([
+    lectureAccueil,
+    articlesDesPlans(origineCanon, robots && robots.texte, debut + 4800),
   ]);
 
-  // Repli par le plan de site des que la lecture directe echoue, quelle qu'en soit la
-  // cause. Le cas frequent des grands quotidiens n'est pas un accueil illisible mais un
-  // accueil lisible sans article exploitable (liens de rubrique, corps charge en
-  // JavaScript, ex. lefigaro.fr) : le plan de site donne alors de vraies adresses d'articles.
-  if (!site.dispo) {
-    let secours = articlesDeXml(planXml, origin);
-    if (!secours.length) {
-      secours = await articlesDuPlanDeSite(origin, robots && robots.texte);
-    }
-    if (secours.length) {
-      const via = await lireSite(origin, secours);
-      if (via.dispo) site = via;   // on ne remplace que si le plan de site a permis de mesurer
-    }
-  }
+  // Une seule lecture : les articles du plan de site d'abord, completes par ceux de l'accueil.
+  const site = await lireSite(origin, accueil, plan, origineCanon);
+  site.plans = (plan && plan.essais) || [];
 
   if (robots.joignable === false && !site.dispo) {
     return json(400, { error: "Ce domaine est introuvable. Vérifiez l'adresse saisie." });
