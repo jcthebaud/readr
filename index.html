@@ -4,355 +4,377 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Readr / Votre média est-il cité par les IA ?</title>
+<link rel="preload" href="readr-texte.woff" as="font" type="font/woff" crossorigin />
 <style>
+  /* Habillage aligné sur readr.agency : fond lavande, cartes prune, titres en Helvetica,
+     texte courant dans la police du site, barre oblique violette. */
+  @font-face{
+    font-family:"Readr Texte"; src:url("readr-texte.woff") format("woff");
+    font-weight:400 700; font-style:normal; font-display:swap;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root{
-    --ink:#0A0A0A; --paper:#FFFFFF; --accent:#8A14FF;
-    --tint:#F5EEFF; --muted:#5F5F5F; --line:#E4E4E4; --soft:#F4F4F4;
+    --prune:#2E1736; --lavande:#F3EAF6; --papier:#FFFFFF;
+    --violet:#BF00FF; --violet-appui:#A300DB;
+    --doux:#5E4A66; --filet:#E4D8E9;
+    --vert:#1B7F3B; --ambre:#8A5A00; --rouge:#B0202A;
+    --titre:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    --texte:"Readr Texte","Source Sans 3","Source Sans Pro",-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --rayon:6px;
+    /* anciens noms, conservés pour le script */
+    --ink:var(--prune); --accent:var(--violet); --line:var(--filet); --muted:var(--doux);
   }
+  html{ -webkit-text-size-adjust:100%; }
   body{
-    font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
-    color:var(--ink); background:var(--paper);
-    -webkit-font-smoothing:antialiased; line-height:1.5;
+    font-family:var(--texte); font-size:17px; line-height:1.5; letter-spacing:-.01em;
+    color:var(--prune); background:var(--lavande); -webkit-font-smoothing:antialiased;
   }
-  .wrap{ max-width:860px; margin:0 auto; padding:44px 28px 72px; }
   .hidden{ display:none !important; }
-  .s{ color:var(--accent); }
+  .s{ color:var(--violet); }
+  .nb{ white-space:nowrap; }
+  a{ color:inherit; }
+  :focus-visible{ outline:2px solid var(--violet); outline-offset:3px; }
 
-  .logo{ font-size:30px; font-weight:800; letter-spacing:-.02em; }
-  .kicker{ margin-top:26px; font-size:12.5px; font-weight:700; letter-spacing:.06em;
-    text-transform:uppercase; }
-  .sub2{ margin-top:12px; font-size:15px; }
+  /* --- En-tête et pied, comme sur le site --- */
+  .tete{ background:var(--papier); }
+  .tete-in{ max-width:1440px; margin:0 auto; padding:30px 68px; display:grid;
+    grid-template-columns:1fr auto 1fr; align-items:center; gap:32px; }
+  .logo{ justify-self:start; font-family:var(--titre); font-size:40px; font-weight:700;
+    letter-spacing:-.045em; line-height:1; color:#000; text-decoration:none; }
+  .nav{ display:flex; gap:24px; font-size:14px; }
+  .nav a{ color:#000; text-decoration:none; padding:2px 0; border-bottom:1px solid transparent; }
+  .nav a:hover, .nav a[aria-current]{ border-bottom-color:#000; }
 
-  .rule{ height:2px; width:48px; background:var(--accent); margin:28px 0 20px; }
+  .pied{ background:var(--papier); }
+  .pied-in{ max-width:1440px; margin:0 auto; padding:56px 68px 48px; display:flex;
+    justify-content:space-between; align-items:flex-end; gap:40px; flex-wrap:wrap; }
+  .foot-logo{ display:inline-block; font-family:var(--titre); font-size:34px; font-weight:700;
+    letter-spacing:-.045em; line-height:1; color:#000; text-decoration:none; }
+  .foot-base{ margin-top:16px; font-family:var(--titre); font-size:17px; font-weight:700; letter-spacing:-.02em; }
+  .foot-desc{ margin-top:10px; font-weight:700; }
+  .foot-addr{ margin-top:2px; }
+  .foot-links{ display:flex; gap:40px; flex-wrap:wrap; }
+  .foot-links a{ text-decoration:none; }
+  .foot-links a:hover{ text-decoration:underline; }
 
-  h1{ font-size:42px; font-weight:800; letter-spacing:-.03em; line-height:1.06; }
-  .sub{ margin-top:18px; font-size:17px; color:var(--muted); max-width:600px; }
-  .sub strong{ color:var(--ink); font-weight:600; }
+  .wrap{ max-width:1076px; margin:0 auto; padding:38px 38px 72px; }
 
-  .field{ margin-top:34px; max-width:600px; }
-  .label{ display:block; font-size:14px; font-weight:600; margin-bottom:7px; }
-  .hint{ font-weight:400; color:var(--muted); }
-  .input, select.input{ width:100%; border:1.5px solid var(--ink); background:var(--paper);
-    font-size:16px; padding:14px 15px; font-family:inherit; color:var(--ink); outline:none;
-    border-radius:0; -webkit-appearance:none; appearance:none; }
-  select.input{ background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%230A0A0A' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-    background-repeat:no-repeat; background-position:right 15px center; background-size:12px; padding-right:40px; }
-  .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--tint); }
-  .input::placeholder{ color:#9A9A9A; }
-  .row{ display:flex; gap:14px; flex-wrap:wrap; }
-  .row > div{ flex:1; min-width:230px; }
+  /* --- Accueil : la saisie est le sujet de la page --- */
+  .hero{ position:relative; overflow:hidden; border-radius:var(--rayon); background:var(--prune); color:#fff;
+    padding:76px 64px; display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);
+    column-gap:72px; align-content:center; }
+  .hero::before{ content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(46% 78% at 80% 50%, rgba(191,0,255,.36), rgba(191,0,255,0) 72%); }
+  .hero::after{ content:""; position:absolute; top:-14%; bottom:-14%; right:25%; width:76px; pointer-events:none;
+    background:linear-gradient(180deg,#D55CFF 0%, #BF00FF 42%, #7410B0 100%); transform:skewX(-17deg); }
+  .hero-titre{ grid-column:1; grid-row:1; }
+  .hero-plus{ grid-column:1; grid-row:2; }
+  .saisie{ grid-column:2; grid-row:1 / span 2; align-self:center; }
+  .hero > *{ position:relative; z-index:1; }
+  h1{ font-family:var(--titre); font-size:clamp(34px,4.6vw,56px); font-weight:700;
+    letter-spacing:-.035em; line-height:1.03; text-wrap:balance; }
+  .sub{ margin-top:26px; font-size:19px; color:rgba(255,255,255,.8); max-width:29em; }
+  .sub strong{ color:#fff; font-weight:700; }
+  .sub2{ margin-top:14px; font-size:17px; }
+  .hero-plus .sub2{ margin-top:14px; }
+  .kicker{ margin-top:30px; font-size:15px; font-weight:600; color:#fff; }
 
-  .btn{ margin-top:24px; display:inline-block; background:var(--ink); color:#fff; border:none;
-    font-family:inherit; font-size:16px; font-weight:600; padding:15px 28px; cursor:pointer; transition:background .15s; }
-  .btn:hover{ background:var(--accent); }
-  .btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .saisie{ background:var(--papier); color:var(--prune); border-radius:var(--rayon); padding:30px 28px 28px; }
+  .champ + .champ{ margin-top:18px; }
+  .label{ display:block; font-size:15px; font-weight:600; margin-bottom:6px; }
+  .input, select.input{ width:100%; border:0; border-bottom:1px solid var(--prune); border-radius:0;
+    background:var(--lavande); font-family:inherit; font-size:17px; letter-spacing:inherit; color:var(--prune);
+    padding:13px 14px; outline:none; -webkit-appearance:none; appearance:none; }
+  select.input{ background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%232E1736' stroke-width='1.6' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center; background-size:12px; padding-right:40px; }
+  .input:focus-visible{ outline:2px solid var(--violet); outline-offset:0; }
+  .input::placeholder{ color:#8D7B94; }
 
-  .legal{ margin-top:18px; font-size:12.5px; color:var(--muted); max-width:540px; }
-  .legal a{ color:var(--accent); }
+  .btn{ display:inline-block; margin-top:24px; background:var(--violet); color:#fff; border:0;
+    border-radius:var(--rayon); font-family:var(--titre); font-size:13px; font-weight:500; line-height:1.2;
+    letter-spacing:.08em; text-transform:uppercase; text-decoration:none; text-align:center;
+    padding:18px 28px; cursor:pointer; transition:background .15s; }
+  .btn:hover{ background:var(--violet-appui); }
+  .btn:disabled{ background:#E6DAEA; color:#8D7B94; cursor:not-allowed; }
+  .saisie .btn{ width:100%; }
+  .err{ margin-top:16px; background:#FBE8E9; color:var(--rouge); border-radius:var(--rayon);
+    padding:12px 14px; font-size:15px; }
+  .signature{ margin-top:20px; font-size:15px; color:var(--doux); }
 
-  .load{ padding:80px 0; }
-  .load .msg{ font-size:18px; font-weight:600; }
-  .load .bar{ margin-top:18px; height:3px; width:100%; max-width:340px; background:var(--soft); overflow:hidden; }
-  .load .bar i{ display:block; height:100%; width:35%; background:var(--accent); animation:slide 1.3s ease-in-out infinite; }
+  /* --- Attente --- */
+  .load{ background:var(--papier); border-radius:var(--rayon); padding:64px; }
+  .load .msg{ margin-top:22px; font-family:var(--titre); font-size:28px; font-weight:700; letter-spacing:-.03em; }
+  .load .bar{ margin-top:22px; height:4px; width:100%; max-width:360px; background:var(--lavande);
+    border-radius:2px; overflow:hidden; }
+  .load .bar i{ display:block; height:100%; width:35%; background:var(--violet); animation:slide 1.3s ease-in-out infinite; }
   @keyframes slide{ 0%{transform:translateX(-100%);} 100%{transform:translateX(340%);} }
 
-  .pill{ display:inline-block; background:var(--accent); color:#fff; font-weight:700;
-    font-size:15px; letter-spacing:-.01em; padding:7px 15px; }
-  .redir{ font-size:13px; color:var(--muted); }
-  .redir b{ color:var(--ink); font-weight:600; }
+  .pill{ display:inline-block; background:var(--violet); color:#fff; font-family:var(--titre); font-weight:700;
+    font-size:15px; letter-spacing:-.01em; padding:7px 14px; border-radius:var(--rayon); }
   .ident{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .redir{ font-size:14px; color:rgba(255,255,255,.7); }
+  .redir b{ color:#fff; font-weight:600; }
 
-  .load .pill{ font-size:16px; }
+  /* --- Bilan : les deux scores d'abord --- */
+  .synthese{ position:relative; overflow:hidden; background:var(--prune); color:#fff;
+    border-radius:var(--rayon); padding:48px 56px 40px; }
+  .synthese::before{ content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(40% 90% at 100% 0%, rgba(191,0,255,.3), rgba(191,0,255,0) 70%); }
+  .synthese > *{ position:relative; }
+  .syn-duo{ margin-top:36px; display:grid; grid-template-columns:1fr 1fr; }
+  .syn-s{ padding-right:36px; }
+  .syn-s2{ padding-left:36px; padding-right:0; border-left:1px solid rgba(255,255,255,.2); }
+  .syn-n{ font-family:var(--titre); font-size:92px; font-weight:700; letter-spacing:-.05em; line-height:.95; }
+  .syn-n:after{ content:" / 100"; font-size:20px; font-weight:500; letter-spacing:-.01em; color:rgba(255,255,255,.62); }
+  .syn-l{ margin-top:12px; font-family:var(--titre); font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .syn-c{ margin-top:4px; font-size:15px; color:rgba(255,255,255,.74); max-width:25em; }
+  .syn-k{ margin-top:36px; padding-top:28px; border-top:1px solid rgba(255,255,255,.2);
+    font-family:var(--titre); font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .syn-x{ margin-top:10px; font-size:18px; line-height:1.55; color:rgba(255,255,255,.9); max-width:44em; }
+  .syn-meta{ margin-top:22px; font-size:14px; color:rgba(255,255,255,.64); }
+  /* aucun score : le motif remplace les chiffres */
+  .sans-score .syn-duo, .sans-score .syn-k, .sans-score .syn-x{ display:none; }
+  .sans-score .syn-meta{ margin-top:26px; font-family:var(--titre); font-size:30px; font-weight:700;
+    letter-spacing:-.03em; line-height:1.1; color:#fff; }
 
-  .site-name{ font-size:15px; color:var(--muted); }
-  .verdict{ margin-top:10px; font-size:30px; font-weight:800; letter-spacing:-.02em; line-height:1.15; max-width:640px; }
-
-  .scorebox{ margin-top:26px; display:flex; align-items:center; gap:26px; flex-wrap:wrap;
-    border:1.5px solid var(--ink); padding:24px 26px; }
-  .scoreval{ font-size:64px; font-weight:800; letter-spacing:-.03em; line-height:1; }
-  .scoreval span{ font-size:24px; color:var(--muted); }
-  .scoretext{ flex:1; min-width:240px; font-size:15px; color:var(--muted); }
-
-  h2{ margin-top:48px; font-size:22px; font-weight:800; letter-spacing:-.02em; }
-  .h2note{ margin-top:7px; font-size:14.5px; color:var(--muted); max-width:600px; }
-
-  .calc{ margin-top:18px; border:1.5px solid var(--line); padding:18px 20px; }
-  .calc-head{ font-size:15px; font-weight:700; display:flex; justify-content:space-between; gap:12px;
-    padding-bottom:12px; border-bottom:1px solid var(--line); }
-  .calc-head span{ color:var(--accent); }
-  .calc-row{ display:flex; align-items:baseline; gap:12px; padding:9px 0; border-bottom:1px solid var(--line);
-    font-size:14px; }
-  .calc-row:last-child{ border-bottom:none; }
-  .calc-crit{ flex:none; width:230px; font-weight:600; }
-  .calc-constat{ flex:1; min-width:130px; color:var(--muted); font-size:13px; }
-  .calc-pts{ flex:none; font-weight:700; font-size:13.5px; width:64px; text-align:right; }
-  .calc-pts.plein{ color:#1B7F3B; } .calc-pts.partiel{ color:#9A6200; } .calc-pts.vide{ color:#B0202A; }
-  .malus{ margin-top:14px; padding-top:14px; border-top:1.5px solid var(--ink); }
-  .malus-t{ font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
-  .malus-row{ display:flex; align-items:baseline; gap:12px; padding:8px 0; font-size:14px;
-    border-bottom:1px solid var(--line); }
-  .malus-row:last-of-type{ border-bottom:none; }
-  .malus-lib{ flex:1; min-width:0; font-weight:600; }
-  .malus-pv{ flex:none; width:170px; color:var(--muted); font-size:12.5px; }
-  .malus-pt{ flex:none; width:52px; text-align:right; font-weight:700; color:#B0202A; font-size:13.5px; }
-  .malus-tot{ margin-top:10px; display:flex; justify-content:space-between; font-size:14px; font-weight:700; }
-
-  .ouv-txt{ margin-top:13px; border-left:3px solid var(--line); background:var(--soft);
-    padding:14px 18px; font-size:14.5px; line-height:1.6; }
-  .ouv-crit{ display:flex; align-items:baseline; gap:12px; padding:9px 0;
-    border-bottom:1px solid var(--line); font-size:14px; }
-  .ouv-crit:first-of-type{ margin-top:14px; border-top:1px solid var(--line); }
-  .ouv-crit:last-of-type{ border-bottom:none; }
-  .ouv-lib{ flex:1; min-width:0; }
-  .ouv-val{ flex:none; font-weight:700; font-size:13px; }
-  .ouv-val.ok{ color:#1B7F3B; } .ouv-val.ko{ color:#B0202A; }
-
-  .reec{ padding:16px 0; border-bottom:1px solid var(--line); }
-  .reec:first-child{ margin-top:14px; border-top:1px solid var(--line); }
-  .reec:last-child{ border-bottom:none; }
-  .reec-f{ font-size:13px; color:var(--muted); }
-  .reec-v{ margin-top:9px; border-left:3px solid var(--accent); background:var(--soft);
-    padding:13px 17px; font-size:14.5px; line-height:1.6; }
-
-  .calc-note{ margin-top:14px; font-size:12.5px; color:var(--muted); }
-
-  .nonmes-detail{ margin-top:10px; font-size:12px; color:var(--muted); font-family:monospace; }
-  .nonmes-plus{ margin-top:8px; font-size:13.5px; color:var(--muted); }
+  .alerte, .nonmes, .done{ margin-top:16px; background:var(--papier); border-radius:var(--rayon);
+    border-left:4px solid var(--violet); padding:22px 28px; }
+  .alerte.douce, .done{ border-left-color:var(--prune); }
+  .alerte-titre, .nonmes > b{ display:block; font-family:var(--titre); font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .alerte-txt{ margin-top:6px; font-size:16px; max-width:52em; }
   #nonmes-raison{ margin-top:6px; }
+  .nonmes-plus{ margin-top:8px; font-size:15px; color:var(--doux); }
+  .nonmes-detail{ margin-top:10px; font-size:13px; color:var(--doux); }
+  .done{ font-weight:600; }
 
-  .nonmes{ margin-top:26px; border-left:3px solid var(--accent); background:var(--tint); padding:18px 22px;
-    font-size:14.5px; line-height:1.55; }
+  /* --- Demande d'adresse --- */
+  .gate{ margin-top:16px; background:var(--papier); border-radius:var(--rayon); padding:44px 48px;
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:56px; align-items:start; }
+  .gate h3{ font-family:var(--titre); font-size:32px; font-weight:700; letter-spacing:-.03em; line-height:1.08; text-wrap:balance; }
+  .gate p{ margin-top:14px; color:var(--doux); max-width:26em; }
+  .check{ display:flex; gap:10px; align-items:flex-start; margin-top:14px; font-size:14px; color:var(--doux); }
+  .check input{ flex:none; width:16px; height:16px; margin-top:3px; accent-color:var(--violet); }
+  .check a{ color:var(--prune); }
+  .gate .btn{ margin-top:20px; }
 
-  .sig{ border-top:1px solid var(--line); padding:22px 0; }
-  .sig:last-child{ border-bottom:1px solid var(--line); }
-  .sig-head{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-  .sig-name{ font-size:17px; font-weight:700; }
-  .tag{ font-size:12px; font-weight:600; padding:3px 9px; border:1px solid var(--line); color:var(--muted); }
-  .tag.fort{ color:#1B7F3B; border-color:#1B7F3B; }
-  .tag.moyen{ color:#9A6200; border-color:#9A6200; }
-  .tag.faible{ color:#B0202A; border-color:#B0202A; }
-  .sig-line{ margin-top:11px; font-size:15px; display:flex; gap:10px; }
-  .sig-line b{ flex:none; width:112px; font-weight:600; color:var(--muted); font-size:13.5px; padding-top:1px; }
-  .sig-line span{ flex:1; }
-
-  .verdict-box{ margin-top:20px; border:1.5px solid var(--ink); padding:22px 24px; }
-  .verdict-k{ font-size:12.5px; font-weight:600; color:var(--muted); }
-  .verdict-v{ margin-top:7px; font-size:19px; font-weight:800; letter-spacing:-.02em; line-height:1.3; }
-  .verdict-w{ margin-top:9px; font-size:14.5px; color:#3A3A3A; line-height:1.55; }
-  .verdict-n{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line);
-    font-size:13px; color:var(--muted); line-height:1.55; }
-
-
-  .reco{ border-top:1px solid var(--line); padding:20px 0; }
-  .reco:last-child{ border-bottom:1px solid var(--line); }
-  .reco-head{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
-  .reco-num{ font-size:15px; font-weight:800; color:var(--accent); }
-  .reco-title{ font-size:17px; font-weight:700; flex:1; min-width:200px; }
-  .reco-detail{ margin-top:9px; font-size:15px; color:#3A3A3A; }
-  .reco-meta{ margin-top:11px; font-size:13px; color:var(--muted); }
-
+  /* --- Rapport --- */
   .veil{ filter:blur(6px); opacity:.45; pointer-events:none; user-select:none; }
   #rapport.robots-seuls .mes{ display:none !important; }
   #rapport .rs{ display:none; }
   #rapport.robots-seuls .rs{ display:inline; }
   #rapport{ transition:filter .35s ease, opacity .35s ease; }
 
-  .mode{ margin-top:14px; font-size:13px; display:inline-flex; align-items:center; gap:8px;
-    padding:6px 12px; border:1px solid var(--line); color:var(--muted); }
-  .mode.ancre{ border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .barre-outils{ margin-top:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .btn-sec{ background:var(--prune); color:#fff; border:0; border-radius:var(--rayon); font-family:var(--titre);
+    font-size:12px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; padding:14px 22px; cursor:pointer; }
+  .btn-sec:hover{ background:#000; }
+  .outils-note{ font-size:15px; color:var(--doux); }
 
-  .alerte{ margin-top:20px; border:1.5px solid var(--accent); background:var(--tint); padding:18px 22px; }
-  .alerte.douce{ border-color:var(--line); background:var(--soft); }
-  .alerte-titre{ font-size:16px; font-weight:800; letter-spacing:-.01em; }
-  .alerte-txt{ margin-top:7px; font-size:14px; line-height:1.55; }
+  h2{ margin-top:64px; font-family:var(--titre); font-size:32px; font-weight:700; letter-spacing:-.03em; line-height:1.1; text-wrap:balance; }
+  .h2note{ margin-top:10px; color:var(--doux); max-width:44em; }
+  .bloc{ margin-top:22px; background:var(--papier); border-radius:var(--rayon); padding:6px 32px; }
+  .bloc:empty{ display:none; }
+  .bloc-cite{ padding:30px 32px 14px; }
+  .scope{ font-size:13px; font-weight:600; padding:3px 9px; border-radius:4px; background:var(--lavande); white-space:nowrap; }
 
-  .duo{ display:flex; gap:16px; margin-top:26px; flex-wrap:wrap; }
-  .card{ flex:1; min-width:220px; border:1.5px solid var(--ink); padding:20px 22px; }
-  .card-plein{ background:var(--ink); border-color:var(--ink); color:#fff; }
-  .card-plein .card-kicker{ color:#C9A6FF; }
-  .card-plein .card-score .den{ color:#8C8C8C; }
-  .card-plein .card-cap, .card-plein .card-note{ color:#B8B8B8; }
-
-  .conclu{ margin-top:18px; border-left:3px solid var(--accent); background:var(--tint); padding:20px 24px; }
-  .conclu-t{ font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); }
-  .conclu-x{ margin-top:9px; font-size:15.5px; line-height:1.6; }
-
-  .offre{ margin-top:38px; background:var(--ink); color:#fff; padding:30px 32px; }
-  .offre-k{ font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#C9A6FF; }
-  .offre-t{ margin-top:10px; font-size:22px; font-weight:800; letter-spacing:-.02em; line-height:1.25; }
-  .offre-p{ margin-top:13px; font-size:15px; line-height:1.65; color:#D0D0D0; max-width:620px; }
-  .offre-l{ margin-top:20px; display:flex; gap:24px; flex-wrap:wrap; }
-  .offre-l a{ color:#fff; font-weight:700; font-size:15px; text-decoration:none;
-    border-bottom:2px solid var(--accent); padding-bottom:3px; }
-  .offre-l a:hover{ color:#C9A6FF; }
-
-  .card-accent{ border-color:var(--accent); }
-  .card-accent .card-kicker{ color:var(--accent); }
-  .card-kicker{ font-size:12px; font-weight:600; color:var(--accent); }
-  .card-title{ margin-top:4px; font-size:17px; font-weight:700; }
-  .card-score{ margin-top:14px; font-size:46px; font-weight:800; letter-spacing:-.03em; line-height:1; }
-  .card-score .den{ font-size:18px; color:var(--muted); font-weight:700; }
-  .card-cap{ margin-top:5px; font-size:12.5px; color:var(--muted); }
-  .card-note{ margin-top:13px; font-size:13.5px; color:var(--muted); }
-
-  .panel-llm{ margin-top:20px; border:1.5px solid var(--line); padding:20px 22px; }
-  .llm-line{ display:flex; gap:14px; align-items:baseline; flex-wrap:wrap; }
-  .llm-line b{ flex:none; width:160px; font-size:13px; font-weight:600; color:var(--muted); }
-  .llm-line span{ font-size:16px; font-weight:700; }
-  .llm-why{ margin-top:6px; margin-left:174px; font-size:14px; color:#3A3A3A; }
-  .llm-sep{ height:1px; background:var(--line); margin:16px 0; }
-
-  .robots{ margin-top:18px; border:1.5px solid var(--line); padding:20px 22px; }
-  .robots-head{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-  .robots-title{ font-size:15px; font-weight:700; }
-  .measured{ font-size:11.5px; font-weight:600; padding:3px 9px;
-    border:1px solid var(--accent); color:var(--accent); }
-  .robots-legende{ margin-top:9px; font-size:13px; color:var(--muted); line-height:1.55; }
-  .robots-intro{ margin-top:9px; font-size:14px; color:#3A3A3A; }
-  .bot{ display:flex; align-items:baseline; gap:16px; padding:10px 0;
-    border-bottom:1px solid var(--line); font-size:14px; }
-  .bot:first-of-type{ border-top:1px solid var(--line); margin-top:14px; }
-  .bot-name{ flex:1; min-width:0; font-weight:600; }
-  .bot-usage{ flex:none; width:110px; color:var(--muted); font-size:12.5px; }
-  .bot-org{ flex:none; width:150px; color:var(--muted); font-size:13px; }
-  .bot-state{ flex:none; width:84px; text-align:right; font-weight:700; font-size:13px; }
-  .bot-state.bloque{ color:#B0202A; }
-  .bot-state.partiel{ color:#9A6200; }
-  .bot-state.autorise{ color:#1B7F3B; }
-
-  .scope{ font-size:11.5px; font-weight:600; padding:2px 8px; border:1px solid var(--line); color:var(--muted); }
-
-  .signature{ margin-top:20px; font-size:14px; color:var(--muted); max-width:540px; }
-  .bridge{ margin-top:20px; font-size:15px; font-weight:600; }
-  .scorecap{ margin-top:6px; font-size:13px; color:var(--muted); max-width:170px; line-height:1.35; }
-
-  .sousbloc{ margin-top:20px; border:1.5px solid var(--line); padding:20px 22px; }
-  .sousbloc-t{ font-size:15px; font-weight:700; display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
-  .sousbloc-n{ margin-top:8px; font-size:13.5px; color:var(--muted); }
-  .passage{ margin-top:14px; border-left:3px solid var(--accent); background:var(--soft);
-    padding:16px 20px; font-size:14.5px; line-height:1.65; font-style:italic; }
-  .passage-ko{ margin-top:14px; font-size:14px; color:var(--muted); line-height:1.55; }
-
-  .item{ border-top:1px solid var(--line); padding:18px 0; display:flex; gap:14px; align-items:flex-start; }
-  .item:last-child{ border-bottom:1px solid var(--line); }
-  .box{ flex:none; width:18px; height:18px; border:1.5px solid var(--ink); margin-top:2px; }
-  .item-body{ flex:1; }
+  .item{ display:flex; gap:20px; align-items:flex-start; padding:24px 0; border-top:1px solid var(--filet); }
+  .item:first-child{ border-top:0; }
+  .num{ flex:none; width:44px; font-family:var(--titre); font-size:28px; font-weight:700; letter-spacing:-.04em;
+    line-height:1; color:var(--violet); }
+  .item-body{ flex:1; min-width:0; }
   .item-head{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  .item-title{ font-size:16.5px; font-weight:700; }
-  .item-detail{ margin-top:7px; font-size:15px; color:#3A3A3A; }
-  .item-meta{ margin-top:10px; font-size:13px; color:var(--muted); }
+  .item-title{ font-family:var(--titre); font-size:20px; font-weight:700; letter-spacing:-.02em; margin-right:4px; }
+  .item-detail{ margin-top:8px; max-width:44em; }
 
-  .gate{ margin-top:28px; border:1.5px solid var(--ink); padding:30px; }
-  .gate h3{ font-size:21px; font-weight:800; letter-spacing:-.02em; }
-  .gate p{ margin-top:9px; font-size:15px; color:var(--muted); max-width:520px; }
-  .gate ul{ margin:16px 0 0 18px; font-size:15px; color:#3A3A3A; }
-  .gate li{ margin-top:5px; }
-  .gate .input{ margin-top:20px; }
-  .check{ display:flex; gap:10px; align-items:flex-start; margin-top:14px; font-size:12.5px; color:var(--muted); }
-  .check input{ margin-top:3px; accent-color:var(--accent); }
+  .fam{ display:flex; justify-content:space-between; align-items:baseline; gap:16px; padding:26px 0 12px;
+    border-bottom:2px solid var(--prune); font-family:var(--titre); font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .sig + .fam{ margin-top:20px; }
+  .fam-s{ color:var(--violet); white-space:nowrap; }
+  .sig{ padding:24px 0; border-top:1px solid var(--filet); }
+  .fam + .sig{ border-top:0; }
+  .sig-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .sig-name{ font-family:var(--titre); font-size:18px; font-weight:700; letter-spacing:-.02em; margin-right:4px; }
+  .tag{ font-size:13px; font-weight:700; padding:3px 9px; border-radius:4px; white-space:nowrap; }
+  .tag.fort{ color:var(--vert); background:#E6F3EA; }
+  .tag.moyen{ color:var(--ambre); background:#FAF0D9; }
+  .tag.faible{ color:var(--rouge); background:#FBE8E9; }
+  .sig-pts{ margin-left:auto; font-family:var(--titre); font-size:15px; font-weight:700; white-space:nowrap; }
+  .sig-line{ margin-top:10px; font-size:16px; display:flex; gap:14px; }
+  .sig-line b{ flex:none; width:92px; font-weight:600; color:var(--doux); font-size:14px; padding-top:2px; }
+  .sig-line span{ flex:1; max-width:46em; }
 
-  .done{ margin-top:26px; background:var(--ink); color:#fff; padding:22px 26px; font-size:15px; }
+  .malus-t{ padding:24px 0 10px; font-family:var(--titre); font-size:18px; font-weight:700; letter-spacing:-.02em; }
+  .malus-row{ display:flex; align-items:baseline; gap:16px; padding:12px 0; border-top:1px solid var(--filet); font-size:16px; }
+  .malus-lib{ flex:1; min-width:0; font-weight:600; }
+  .malus-pv{ flex:none; width:220px; color:var(--doux); font-size:14px; }
+  .malus-pt{ flex:none; width:52px; text-align:right; font-weight:700; color:var(--rouge); }
+  .malus-tot{ display:flex; justify-content:space-between; gap:16px; padding:14px 0 18px;
+    border-top:2px solid var(--prune); font-weight:700; }
 
-  .err{ margin-top:22px; border-left:3px solid var(--accent); background:var(--tint); padding:16px 20px; font-size:14.5px; }
-  .again{ background:none; border:none; color:var(--accent); font-weight:600; cursor:pointer;
-    font-family:inherit; font-size:15px; padding:0; text-decoration:underline; margin-top:34px; }
+  .robots{ margin-top:22px; background:var(--papier); border-radius:var(--rayon); padding:30px 32px 10px; }
+  .robots-head{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .robots-title{ font-family:var(--titre); font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .measured{ font-size:13px; font-weight:600; padding:3px 9px; border-radius:4px; background:var(--lavande); }
+  .robots-intro{ margin-top:12px; font-weight:600; }
+  .robots-legende{ margin-top:8px; font-size:15px; color:var(--doux); max-width:52em; }
+  #r-robots-list{ margin-top:20px; }
+  .bot{ display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) 124px 88px; gap:16px;
+    align-items:baseline; padding:12px 0; border-top:1px solid var(--filet); font-size:16px; }
+  .bot-name{ font-weight:700; }
+  .bot-org, .bot-usage{ color:var(--doux); font-size:15px; }
+  .bot-state{ text-align:right; font-weight:700; }
+  .bot-state.bloque{ color:var(--rouge); }
+  .bot-state.partiel{ color:var(--ambre); }
+  .bot-state.autorise{ color:var(--vert); }
+  .calc-note{ margin-top:14px; font-size:15px; color:var(--doux); max-width:52em; }
 
+  .ouv-txt, .passage{ border-left:4px solid var(--violet); background:var(--lavande);
+    border-radius:0 var(--rayon) var(--rayon) 0; padding:18px 22px; line-height:1.6; }
+  .passage{ margin-bottom:16px; }
+  .passage-ko{ margin-bottom:16px; color:var(--doux); }
+  .ouv-crit{ display:flex; align-items:baseline; gap:12px; padding:12px 0; border-top:1px solid var(--filet); font-size:16px; }
+  .ouv-txt + .ouv-crit{ margin-top:16px; border-top:0; }
+  .ouv-lib{ flex:1; min-width:0; }
+  .ouv-val{ flex:none; font-weight:700; }
+  .ouv-val.ok{ color:var(--vert); } .ouv-val.ko{ color:var(--rouge); }
 
-  /* --- Synthèse exécutive --- */
-  .synthese{ margin-top:22px; border:2px solid var(--ink); padding:26px 28px; }
-  .syn-k{ font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
-  .syn-x{ margin-top:12px; font-size:17px; line-height:1.6; }
-  .syn-duo{ margin-top:22px; display:flex; gap:0; border-top:1px solid var(--line); }
-  .syn-s{ flex:1; padding:18px 20px 4px 0; }
-  .syn-s2{ padding-left:24px; border-left:1px solid var(--line); }
-  .syn-n{ font-size:46px; font-weight:800; letter-spacing:-.03em; line-height:1; }
-  .syn-n:after{ content:" / 100"; font-size:15px; font-weight:700; color:var(--muted); letter-spacing:0; }
-  .syn-l{ margin-top:6px; font-size:15px; font-weight:700; }
-  .syn-c{ margin-top:4px; font-size:12.5px; color:var(--muted); line-height:1.45; }
-  .syn-meta{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line);
-    font-size:12.5px; color:var(--muted); }
+  /* --- Bandeau final, comme l'appel du site --- */
+  .offre{ position:relative; overflow:hidden; margin-top:64px; background:var(--prune); color:#fff;
+    border-radius:var(--rayon); padding:48px 56px; }
+  .offre::before{ content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(44% 120% at 100% 100%, rgba(191,0,255,.34), rgba(191,0,255,0) 70%); }
+  .offre > *{ position:relative; }
+  .offre-k{ font-size:15px; font-weight:600; color:rgba(255,255,255,.72); }
+  .offre-t{ font-family:var(--titre); font-size:32px; font-weight:700; letter-spacing:-.03em; line-height:1.1; }
+  .offre-p{ margin-top:14px; line-height:1.55; color:rgba(255,255,255,.82); max-width:44em; }
+  .offre-l{ margin-top:26px; display:flex; gap:28px; align-items:center; flex-wrap:wrap; }
+  .offre-l .btn{ margin-top:0; }
+  .offre-l a:not(.btn){ color:#fff; font-weight:600; text-decoration:underline; text-decoration-color:var(--violet);
+    text-decoration-thickness:2px; text-underline-offset:5px; }
 
-  .version-note{ margin-top:26px; font-size:11px; color:#B0B0B0; }
-  .impression-pied{ display:none; }
-  @media print { .impression-pied{ display:block; margin-top:22px; padding-top:12px;
-    border-top:1px solid var(--line); font-size:11px; color:var(--muted); } }
+  .again{ display:inline-block; margin-top:40px; background:none; border:0; padding:0; cursor:pointer;
+    font-family:inherit; font-size:17px; font-weight:600; letter-spacing:inherit; color:var(--prune);
+    text-decoration:underline; text-decoration-color:var(--violet); text-decoration-thickness:2px; text-underline-offset:5px; }
+  .version-note{ margin-top:32px; font-size:12px; color:#9C8BA3; }
+  .impression-tete, .impression-pied{ display:none; }
 
-  .barre-outils{ margin:22px 0 6px; }
-  .btn-sec{ background:#fff; color:var(--ink); border:1.5px solid var(--ink); font-family:inherit;
-    font-size:14px; font-weight:700; padding:11px 20px; cursor:pointer; }
-  .btn-sec:hover{ background:var(--ink); color:#fff; }
-  .outils-note{ margin-left:14px; font-size:13px; color:var(--muted); }
-
-  .fam{ margin-top:26px; padding:11px 0 9px; border-bottom:2px solid var(--ink);
-    display:flex; justify-content:space-between; font-size:14px; font-weight:800;
-    letter-spacing:.04em; text-transform:uppercase; }
-  .fam-s{ color:var(--accent); }
-  .sig-pts{ margin-left:auto; font-size:13px; font-weight:700; color:var(--muted); }
-  .num{ flex:none; width:26px; color:var(--accent); font-weight:800; font-size:15px; }
+  @media screen and (max-width:860px){
+    .tete-in{ grid-template-columns:1fr; padding:20px 20px; }
+    .logo{ font-size:32px; }
+    .nav{ display:none; }
+    .wrap{ padding:16px 16px 56px; }
+    .hero{ grid-template-columns:1fr; padding:44px 24px 36px; }
+    .hero-titre, .hero-plus, .saisie{ grid-column:1; grid-row:auto; }
+    .saisie{ margin-top:32px; }
+    .hero-plus{ margin-top:14px; }
+    .hero::before{ background:radial-gradient(90% 40% at 60% 62%, rgba(191,0,255,.36), rgba(191,0,255,0) 72%); }
+    .hero::after{ display:none; }
+    .sub{ font-size:18px; }
+    .load{ padding:40px 24px; }
+    .synthese{ padding:32px 24px 28px; }
+    .syn-duo{ grid-template-columns:1fr; }
+    .syn-s{ padding-right:0; }
+    .syn-s2{ margin-top:28px; padding:28px 0 0; border-left:0; border-top:1px solid rgba(255,255,255,.2); }
+    .syn-n{ font-size:76px; }
+    .gate{ grid-template-columns:1fr; gap:24px; padding:32px 24px; }
+    .gate h3, h2, .offre-t{ font-size:27px; }
+    h2{ margin-top:48px; }
+    .bloc{ padding:4px 20px; } .bloc-cite{ padding:22px 20px 8px; }
+    .robots{ padding:24px 20px 6px; }
+    .alerte, .nonmes, .done{ padding:20px 20px; }
+    .item{ gap:12px; } .num{ width:34px; font-size:24px; }
+    .sig-line{ display:block; } .sig-line b{ display:block; width:auto; margin-bottom:2px; }
+    .malus-row{ flex-wrap:wrap; } .malus-pv{ order:3; width:100%; }
+    .bot{ grid-template-columns:minmax(0,1fr) auto; gap:2px 16px; }
+    .bot-name{ grid-column:1; grid-row:1; } .bot-state{ grid-column:2; grid-row:1; }
+    .bot-org{ grid-column:1; grid-row:2; } .bot-usage{ grid-column:2; grid-row:2; text-align:right; }
+    .offre{ padding:36px 24px; margin-top:48px; }
+    .pied-in{ padding:40px 20px 36px; align-items:flex-start; flex-direction:column; gap:28px; }
+    .foot-links{ gap:24px; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .load .bar i{ animation:none; width:100%; }
+    #rapport, .btn{ transition:none; }
+  }
 
   /* --- Impression : produit un PDF transférable --- */
   @media print {
     @page { size: A4; margin: 14mm 12mm; }
-    body{ background:#fff; }
+    body{ background:#fff; font-size:15px; }
     .wrap{ max-width:none; padding:0; }
-    .noprint, #step-input, #step-loading, .gate, .again, .barre-outils, .foot-bar{ display:none !important; }
-    #rapport{ filter:none !important; opacity:1 !important; }
-    .veil{ filter:none !important; opacity:1 !important; }
-    h2{ page-break-after:avoid; }
-    .sig, .item, .bot, .reec, .synthese, .alerte, .offre{ page-break-inside:avoid; }
-    .synthese{ border-width:1.5px; }
-    .offre{ background:#fff !important; color:var(--ink) !important; border:1.5px solid var(--ink); }
-    .offre-k{ color:var(--accent) !important; }
-    .offre-p{ color:var(--ink) !important; }
-    .offre-l a{ color:var(--ink) !important; }
-    a{ text-decoration:none; color:var(--ink); }
-    .pill{ background:#fff !important; color:var(--ink) !important; border:1.5px solid var(--accent); }
+    .tete, .pied, .noprint, #step-input, #step-loading, .gate, .again, .barre-outils{ display:none !important; }
+    .impression-tete{ display:block; margin-bottom:18px; font-family:var(--titre); font-size:30px; font-weight:700; letter-spacing:-.045em; }
+    .impression-pied{ display:block; margin-top:22px; padding-top:12px; border-top:1px solid var(--filet);
+      font-size:11px; color:var(--doux); }
+    #rapport, .veil{ filter:none !important; opacity:1 !important; }
+    .synthese, .offre{ background:#fff !important; color:var(--prune) !important; border:1.5px solid var(--prune); padding:26px 28px; }
+    .synthese::before, .offre::before{ display:none; }
+    .syn-duo{ margin-top:22px; }
+    .syn-n{ font-size:64px; }
+    .syn-k{ margin-top:22px; padding-top:18px; font-size:17px; }
+    .syn-x{ font-size:15px; max-width:none; }
+    .bloc{ margin-top:14px; padding:2px 22px; } .bloc-cite{ padding:20px 22px 6px; }
+    .robots{ margin-top:14px; padding:20px 22px 4px; }
+    .item, .sig{ padding:15px 0; }
+    .item-title, .fam, .robots-title, .alerte-titre{ font-size:17px; }
+    .sig-name, .malus-t{ font-size:16px; }
+    .sig-line, .bot, .ouv-crit, .malus-row{ font-size:14px; }
+    .sig-line{ margin-top:6px; }
+    .bot, .ouv-crit{ padding:8px 0; }
+    .num{ font-size:22px; width:36px; }
+    .h2note, .item-detail, .robots-legende, .calc-note{ font-size:14px; }
+    .alerte, .nonmes{ padding:16px 22px; }
+    .syn-n:after, .syn-c, .syn-meta, .redir, .offre-k{ color:var(--doux) !important; }
+    .redir b, .syn-x, .offre-p{ color:var(--prune) !important; }
+    .syn-s2, .syn-k{ border-color:var(--filet); }
+    .pill{ background:#fff !important; color:var(--prune) !important; border:1.5px solid var(--violet); }
+    .alerte, .nonmes, .bloc, .robots{ border:1px solid var(--filet); }
+    .alerte, .nonmes{ border-left:4px solid var(--violet); }
+    .ouv-txt, .passage{ background:#fff; }
+    h2{ margin-top:34px; font-size:24px; page-break-after:avoid; }
+    .offre{ margin-top:34px; }
+    .offre-l .btn{ background:none !important; color:var(--prune) !important; padding:0; font-family:inherit;
+      font-size:15px; font-weight:700; letter-spacing:0; text-transform:none; }
+    .offre-l a:not(.btn){ color:var(--prune) !important; text-decoration:none; }
+    .sig, .item, .bot, .synthese, .alerte, .offre{ page-break-inside:avoid; }
+    .fam, .malus-t{ page-break-after:avoid; break-after:avoid; }
+    a{ text-decoration:none; }
   }
-
-  .foot-bar{ margin-top:56px; padding-top:26px; border-top:1px solid var(--line);
-    display:flex; justify-content:space-between; gap:28px; flex-wrap:wrap; }
-  .foot-logo{ display:inline-block; font-size:24px; font-weight:800; letter-spacing:-.02em;
-    color:var(--ink); text-decoration:none; }
-  .foot-base{ margin-top:8px; font-size:14px; font-weight:700; letter-spacing:-.01em; }
-  .foot-desc{ margin-top:8px; font-size:13.5px; color:var(--muted); }
-  .foot-addr{ margin-top:3px; font-size:13.5px; color:var(--muted); }
-  .foot-links{ display:flex; flex-direction:column; gap:7px; font-size:13.5px; }
-  .foot-links a{ color:var(--muted); text-decoration:none; }
-  .foot-links a:hover{ color:var(--accent); text-decoration:underline; }
-
-  @media (max-width:620px){
-    h1{ font-size:31px; } .verdict{ font-size:24px; } .scoreval{ font-size:52px; }
-    .sig-line{ display:block; } .sig-line b{ width:auto; display:block; margin-bottom:3px; }
-    .llm-line b{ width:auto; } .llm-why{ margin-left:0; }
-    .calc-row{ flex-wrap:wrap; } .calc-crit{ width:auto; }
-    .bot-org{ width:auto; } .bot-state{ width:auto; }
-  }
-  @media (prefers-reduced-motion: reduce){ .load .bar i{ animation:none; width:100%; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="logo">read<span class="s">/</span>r</div>
+<header class="tete">
+  <div class="tete-in">
+    <a class="logo" href="https://www.readr.agency/" aria-label="Readr, retour au site">read<span class="s">/</span>r</a>
+    <nav class="nav" aria-label="Site Readr">
+      <a href="https://www.readr.agency/" target="_blank" rel="noopener">Offre Conseil</a>
+      <a href="https://www.readr.agency/ai-overview" aria-current="page" target="_blank" rel="noopener">Nos outils</a>
+      <a href="https://www.readr.agency/reddit" target="_blank" rel="noopener">Reddit</a>
+      <a href="https://www.readr.agency/blog" target="_blank" rel="noopener">Blog</a>
+      <a href="https://www.readr.agency/rendezvous" target="_blank" rel="noopener">Rendez-vous</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="impression-tete">read<span class="s">/</span>r</div>
 
   <!-- SAISIE -->
   <section id="step-input">
-    <div class="kicker">Médias <span class="s">/</span> Presse <span class="s">/</span> Éditeurs de contenus</div>
-    <div class="rule"></div>
-    <h1>Votre média est-il cité<br />par les IA ? Faites le test.</h1>
-    <p class="sub">Ce qui empêche les IA de citer vos articles, et comment le corriger.
-      <strong>Diagnostic gratuit en 3 minutes.</strong> Vous recevez votre score de citation et la liste
-      des correctifs à mettre en oeuvre, par ordre de priorité.</p>
-    <p class="sub sub2">Les AI Overviews de Google répondent désormais à la place de vos articles.
-      Une part croissante des recherches se termine sans clic, et le trafic organique des éditeurs recule.</p>
+    <div class="hero">
+      <div class="hero-titre">
+        <h1><span class="s" aria-hidden="true">/</span>Votre média <span class="nb">est-il</span> cité par les <span class="nb">IA&nbsp;?</span> <span class="nb">Faites le test.</span></h1>
+        <p class="sub">Ce qui empêche les IA de citer vos articles, et comment le corriger.
+          <strong>Diagnostic gratuit en 3 minutes.</strong> Vous recevez votre score de citation et la liste
+          des correctifs à mettre en œuvre, par ordre de priorité.</p>
+      </div>
 
-    <div class="field">
-      <div class="row">
-        <div>
+      <div class="saisie">
+        <div class="champ">
           <label class="label" for="url">Adresse de votre média</label>
           <input id="url" class="input" type="text" placeholder="votremedia.fr" autocomplete="off" />
         </div>
-        <div>
+        <div class="champ">
           <label class="label" for="theme">Thématique dominante</label>
           <select id="theme" class="input">
             <option value="">Choisir une thématique</option>
@@ -373,15 +395,19 @@
             <option>Immobilier et emploi</option>
           </select>
         </div>
+        <button id="analyze-btn" class="btn" disabled>Lancer le diagnostic</button>
+        <div id="input-error" class="err hidden"></div>
+      </div>
+
+      <div class="hero-plus">
+        <p class="sub sub2">Les AI Overviews de Google répondent désormais à la place de vos articles.
+          Une part croissante des recherches se termine sans clic, et le trafic organique des éditeurs recule.</p>
+        <p class="kicker">Médias <span class="s" aria-hidden="true">/</span> Presse <span class="s" aria-hidden="true">/</span> Éditeurs de contenus</p>
       </div>
     </div>
 
-    <button id="analyze-btn" class="btn" disabled>Lancer le diagnostic</button>
-    <div id="input-error" class="err hidden"></div>
-
     <p class="signature">Diagnostic réalisé par Readr, agence indépendante acquisition, crm et data,
       spécialisée sur les médias et l'abonnement.</p>
-
   </section>
 
   <!-- CHARGEMENT -->
@@ -395,16 +421,13 @@
 
   <!-- RESULTATS -->
   <section id="step-results" class="hidden">
-    <div class="rule"></div>
-    <div class="ident">
-      <span class="pill" id="r-host"></span>
-      <span class="redir" id="r-redir"></span>
-    </div>
 
-    <!-- Synthèse : lisible en dix secondes, transférable -->
+    <!-- Bilan : lisible en dix secondes, transférable -->
     <div class="synthese">
-      <div class="syn-k">Synthèse</div>
-      <div class="syn-x" id="r-synthese"></div>
+      <div class="ident">
+        <span class="pill" id="r-host"></span>
+        <span class="redir" id="r-redir"></span>
+      </div>
       <div class="syn-duo">
         <div class="syn-s">
           <div class="syn-n" id="r-cit-score">–</div>
@@ -417,6 +440,8 @@
           <div class="syn-c">Canaux par lesquels vous joignez vos lecteurs sans intermédiaire</div>
         </div>
       </div>
+      <div class="syn-k"><span class="s" aria-hidden="true">/</span>Synthèse</div>
+      <div class="syn-x" id="r-synthese"></div>
       <div class="syn-meta" id="r-meta"></div>
     </div>
 
@@ -436,17 +461,22 @@
 
     <div class="noprint">
       <div class="gate" id="gate">
-        <h3 id="gate-titre">Afficher le rapport complet</h3>
-        <p id="gate-texte">Le détail des quinze critères mesurés, vos priorités de correction et la version imprimable
-          s'affichent immédiatement sur cette page.</p>
-        <input id="email" class="input" type="email" placeholder="prenom.nom@votremedia.fr" autocomplete="off" />
-        <label class="check">
-          <input id="consent" type="checkbox" />
-          <span>J'accepte que Readr conserve mon adresse professionnelle pour me recontacter au sujet de ce
-            diagnostic. Aucune cession à des tiers.
-            <a href="https://www.readr.agency/mentions-legales" target="_blank" rel="noopener">Mentions légales</a>.</span>
-        </label>
-        <button id="unlock-btn" class="btn" disabled>Afficher le rapport complet</button>
+        <div>
+          <h3><span class="s" aria-hidden="true">/</span><span id="gate-titre">Afficher le rapport complet</span></h3>
+          <p id="gate-texte">Le détail des quinze critères mesurés, vos priorités de correction et la version imprimable
+            s'affichent immédiatement sur cette page.</p>
+        </div>
+        <div>
+          <label class="label" for="email">Votre adresse professionnelle</label>
+          <input id="email" class="input" type="email" placeholder="prenom.nom@votremedia.fr" autocomplete="off" />
+          <label class="check">
+            <input id="consent" type="checkbox" />
+            <span>J'accepte que Readr conserve mon adresse professionnelle pour me recontacter au sujet de ce
+              diagnostic. Aucune cession à des tiers.
+              <a href="https://www.readr.agency/mentions-legales" target="_blank" rel="noopener">Mentions légales</a>.</span>
+          </label>
+          <button id="unlock-btn" class="btn" disabled>Afficher le rapport complet</button>
+        </div>
       </div>
     </div>
 
@@ -459,17 +489,17 @@
       </div>
       <div id="done" class="done hidden noprint">Rapport complet affiché. Nous revenons vers vous prochainement.</div>
 
-      <h2 class="mes">Vos priorités</h2>
+      <h2 class="mes"><span class="s" aria-hidden="true">/</span>Vos priorités</h2>
       <p class="h2note mes">Les critères sur lesquels vous perdez le plus de points, avec l'action correspondante.</p>
-      <div id="r-recos" class="mes"></div>
+      <div id="r-recos" class="bloc mes"></div>
 
-      <h2 class="mes">Le détail des mesures</h2>
+      <h2 class="mes"><span class="s" aria-hidden="true">/</span>Le détail des mesures</h2>
       <p class="h2note mes">Quinze critères relevés dans le code de vos articles. Chaque score est la somme de points
         attribués selon une grille fixe, identique pour tous les médias analysés.</p>
-      <div id="r-constats" class="mes"></div>
-      <div id="r-malus" class="mes"></div>
+      <div id="r-constats" class="bloc mes"></div>
+      <div id="r-malus" class="bloc mes"></div>
 
-      <h2><span class="mes">Vos robots et vos canaux</span><span class="rs">Vos robots IA</span></h2>
+      <h2><span class="s" aria-hidden="true">/</span><span class="mes">Vos robots et vos canaux</span><span class="rs">Vos robots IA</span></h2>
       <div class="robots" id="r-robots-block">
         <div class="robots-head"><span class="robots-title">Robots IA déclarés dans votre robots.txt</span>
           <span class="measured">Donnée vérifiée</span></div>
@@ -482,31 +512,30 @@
       </div>
       <p class="calc-note mes" id="r-reseaux-note"></p>
 
-      <h2 class="mes">Le premier paragraphe de vos articles</h2>
+      <h2 class="mes"><span class="s" aria-hidden="true">/</span>Le premier paragraphe de vos articles</h2>
       <p class="h2note mes">Nous avons relevé le paragraphe d'attaque d'un de vos articles, tel qu'il figure
         dans le corps du texte. C'est celui qu'un moteur lit en premier pour décider si votre article
         répond à la question posée. Trois conditions le rendent exploitable : rester court, contenir une
         donnée concrète, et se comprendre sans avoir lu ce qui précède.</p>
-      <div id="r-ouv" class="mes"></div>
+      <div id="r-ouv" class="bloc bloc-cite mes"></div>
 
-      <h2 class="mes">Un exemple de passage reprenable</h2>
+      <h2 class="mes"><span class="s" aria-hidden="true">/</span>Un exemple de passage reprenable</h2>
       <p class="h2note mes">Un moteur de réponse ne cite jamais un article entier : il en extrait une ou deux
         phrases. Parmi tous les paragraphes de vos articles analysés, voici celui qui remplit le mieux les
         conditions de reprise : une longueur de vingt-cinq à soixante-dix mots, au moins une donnée
         vérifiable, une phrase complète, et aucun mot renvoyant à ce qui précède. Il sert d'exemple de ce
         que vos contenus offrent déjà.</p>
-      <div id="r-passage" class="mes"></div>
+      <div id="r-passage" class="bloc bloc-cite mes"></div>
 
       <div class="offre">
-        <div class="offre-k">Pour aller plus loin</div>
-        <div class="offre-t">Reprendre la main sur votre audience.</div>
+        <div class="offre-t"><span class="s" aria-hidden="true">/</span>Reprendre la main sur votre audience.</div>
         <p class="offre-p">Readr est une agence indépendante spécialisée sur les médias et l'abonnement.
           Nous intervenons sur ce qui vous appartient : stratégie CRM et marketing automation, offre de
           newsletters, parcours de connexion et d'abonnement, acquisition diversifiée, exploitation de vos
           données. <span class="mes">Une partie des correctifs ci-dessus relève de votre équipe technique ou de
           votre rédaction.</span> La transformation de votre audience en base d'abonnés, c'est notre métier.</p>
         <div class="offre-l">
-          <a href="https://www.readr.agency/rendezvous" target="_blank" rel="noopener">Prendre rendez-vous</a>
+          <a class="btn" href="https://www.readr.agency/rendezvous" target="_blank" rel="noopener">Prendre rendez-vous</a>
           <a href="https://www.readr.agency/" target="_blank" rel="noopener">readr.agency</a>
         </div>
       </div>
@@ -521,8 +550,10 @@
     Diagnostic de visibilité IA réalisé par Readr, agence indépendante acquisition, crm et data.
     readr.agency
   </div>
+</main>
 
-  <div class="foot-bar">
+<footer class="pied">
+  <div class="pied-in">
     <div class="foot-left">
       <a class="foot-logo" href="https://www.readr.agency/" target="_blank" rel="noopener">read<span class="s">/</span>r</a>
       <div class="foot-base"><span class="s">/</span>own your audience</div>
@@ -535,7 +566,7 @@
       <a href="https://www.readr.agency/mentions-legales" target="_blank" rel="noopener">Mentions légales</a>
     </div>
   </div>
-</div>
+</footer>
 
 <script>
   /* ============================================================
@@ -685,6 +716,8 @@
     el("r-redir").innerHTML = data.redirige ? (T.redirection + " <b>" + esc(hostAnalyse) + "</b>") : "";
 
     alerteRobots(data.robots);
+    // Sans score, le bilan affiche le motif à la place des deux chiffres.
+    el("step-results").classList.toggle("sans-score", !data.mesurable);
 
     if(!data.mesurable){
       el("r-cit-score").textContent = "–";
