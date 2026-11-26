@@ -459,9 +459,20 @@ function analyserPage(htmlComplet) {
   // La balise doit etre exactement <p>. L'ancien motif "<p[^>]*>" attrapait aussi
   // <picture> et <path> : le "premier paragraphe" commencait alors par les boutons de
   // partage, le credit photo ou le titre (livreshebdo.fr, challenges.fr).
-  let paras = (corps.match(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/gi) || [])
+  // Les legendes de photo ne sont pas des paragraphes de l'article.
+  const corpsSansLegendes = corps
+    .replace(/<figure[\s\S]*?<\/figure>/gi, " ")
+    .replace(/<figcaption[\s\S]*?<\/figcaption>/gi, " ");
+  let paras = (corpsSansLegendes.match(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/gi) || [])
     .map(function (t) { return texteVisible(t); })
     .filter(function (t) { return t.split(/\s+/).length >= 8; });
+
+  // Une ligne de date ("Publie le...") ou une invitation a s'inscrire, placee avant le
+  // texte, n'est pas le paragraphe d'ouverture : on passe au suivant.
+  const horsTexte = /^(publi[e\u00e9]e?\s+le|mis\s+[a\u00e0]\s+jour|modifi[e\u00e9]e?\s+le|recevez\s|abonnez-vous|inscrivez-vous|lire\s+aussi|[a\u00e0]\s+lire\s+aussi)/i;
+  while (paras.length > 1 && paras[0].split(/\s+/).length < 30 && horsTexte.test(paras[0].trim())) {
+    paras = paras.slice(1);
+  }
 
   // Un titre repris dans une balise <p> n'est pas un paragraphe d'ouverture.
   const titrePage = normaliser(texteVisible((html.match(/<h1(?:\s[^>]*)?>[\s\S]*?<\/h1>/i) || [""])[0]));
@@ -554,18 +565,23 @@ async function lireSite(origin, rep, plan, origineCanon) {
   let originFinal = origineCanon || origin;
   if (rep) { try { originFinal = new URL(rep.urlFinale).origin; } catch (e) {} }
 
-  // Le plan de site prime : il liste de vrais articles, dates, la ou une page d'accueil
-  // ne livre souvent que des liens de rubrique. Quelques liens de l'accueil completent
-  // l'echantillon, pour ne pas dependre d'un plan de site mal tenu.
+  // Un plan de site frais prime : il liste de vrais articles, dates, la ou une page
+  // d'accueil ne livre souvent que des liens de rubrique. Quelques liens de l'accueil
+  // completent l'echantillon. Un plan ancien ou sans date ne sert qu'en secours, quand
+  // l'accueil est illisible ou trop pauvre : il risquerait de remonter des archives.
   // La page d'accueil reste lue par ailleurs, pour les signaux d'audience en propre.
-  const urls = urlsPlan.slice();
-  const quota = urlsPlan.length ? Math.max(NB_COMPLEMENT_ACCUEIL, NB_PAGES_TESTEES - urlsPlan.length) : NB_PAGES_TESTEES;
-  if (rep) {
-    let ajoutes = 0;
-    trouverArticles(accueil, originFinal, NB_PAGES_TESTEES).forEach(function (u) {
-      if (ajoutes < quota && urls.indexOf(u) === -1) { urls.push(u); ajoutes++; }
-    });
-  }
+  const deAccueil = rep ? trouverArticles(accueil, originFinal, NB_PAGES_TESTEES) : [];
+  const planPrime = urlsPlan.length > 0 && (!!plan.frais || deAccueil.length < 6);
+  const principales = planPrime ? urlsPlan : deAccueil;
+  const secondaires = planPrime ? deAccueil : (plan && plan.frais ? urlsPlan : []);
+  const urls = principales.slice(0, NB_PAGES_TESTEES);
+  const nbPrincipales = urls.length;
+  const quota = Math.max(NB_COMPLEMENT_ACCUEIL, NB_PAGES_TESTEES - nbPrincipales);
+  let ajoutes = 0;
+  secondaires.forEach(function (u) {
+    if (ajoutes < quota && urls.indexOf(u) === -1) { urls.push(u); ajoutes++; }
+  });
+  const estDuPlan = function (i) { return planPrime ? i < nbPrincipales : i >= nbPrincipales; };
   // En parallele : seize pages coutent le meme temps qu'une seule.
   const reps = await Promise.all(urls.map(function (u) { return getHTML(u, 4000); }));
 
@@ -580,17 +596,17 @@ async function lireSite(origin, rep, plan, origineCanon) {
     // Une adresse du plan news est un article declare comme tel par l'editeur : un texte
     // lisible suffit, meme sans balisage ni date (lesinrocks.com). Les autres pages
     // passent la validation complete, qui ecarte rubriques et pages de service.
-    const declareArticle = planNews && i < urlsPlan.length && !mes.coquille
+    const declareArticle = planNews && estDuPlan(i) && !mes.coquille
                         && mes.mots >= 120 && mes.parasUtiles >= 3;
     if (!declareArticle && !estUnArticle(mes)) return;
-    candidates.push({ url: urls[i], duPlan: i < urlsPlan.length, mesures: mes,
+    candidates.push({ url: urls[i], duPlan: estDuPlan(i), principale: i < nbPrincipales, mesures: mes,
                       extrait: texteVisible(h.html).slice(0, 450) });
   });
 
-  // On privilegie les pages balisees, puis celles du plan de site, puis les plus fournies.
+  // On privilegie les pages balisees, puis celles de la source principale, puis les plus fournies.
   candidates.sort(function (a, b) {
     if (a.mesures.schemaArticle !== b.mesures.schemaArticle) return a.mesures.schemaArticle ? -1 : 1;
-    if (a.duPlan !== b.duPlan) return a.duPlan ? -1 : 1;
+    if (a.principale !== b.principale) return a.principale ? -1 : 1;
     return b.mesures.mots - a.mesures.mots;
   });
   const pages = candidates.slice(0, NB_ARTICLES_RETENUS);
@@ -806,7 +822,8 @@ function entreesDuPlan(xml) {
   return res;
 }
 
-// Retient les adresses d'articles du site, les plus recentes d'abord.
+// Retient les articles du site, les plus recents d'abord. Chaque element garde sa date
+// (0 si le plan n'en donne pas), pour juger ensuite de la fraicheur du plan.
 function articlesDesEntrees(entrees, origin, max) {
   const hote = hoteNu(origin);
   const bons = entrees.filter(function (e) {
@@ -826,11 +843,11 @@ function articlesDesEntrees(entrees, origin, max) {
   // Plan date : les plus recents d'abord. Le tri est stable, l'ordre du plan departage.
   const dates = bons.filter(function (e) { return e.t > 0; });
   if (dates.length >= Math.min(bons.length, 6)) {
-    return uniques(dates.sort(function (a, b) { return b.t - a.t; })).slice(0, max)
-      .map(function (e) { return e.url; });
+    return uniques(dates.sort(function (a, b) { return b.t - a.t; })).slice(0, max);
   }
   // Sans date, les plans rangent en general les nouveautes a la fin.
-  return uniques(bons.slice().reverse()).slice(0, max).map(function (e) { return e.url; });
+  return uniques(bons.slice().reverse()).slice(0, max)
+    .map(function (e) { return { url: e.url, t: 0, news: e.news }; });
 }
 
 // Dans un index de plans, choisit celui qui a le plus de chances de lister les
@@ -883,7 +900,7 @@ function plansCandidats(origin, robotsTxt) {
 async function articlesDesPlans(origin, robotsTxt, limite) {
   const essais = [];
   const court = function (u) { return u.replace(/^https?:\/\/[^\/]+/i, "").slice(0, 60); };
-  const delai = function () { return Math.min(3000, limite - Date.now()); };
+  const delai = function () { return Math.min(2500, limite - Date.now()); };
   const candidats = plansCandidats(origin, robotsTxt);
   let repli = null;
 
@@ -900,18 +917,26 @@ async function articlesDesPlans(origin, robotsTxt, limite) {
         news = news || /news|actu/i.test(sous);
         essais.push(court(lot[i]) + " : index, plan retenu " + court(sous));
       }
-      const urls = articlesDesEntrees(entrees, origin, NB_PAGES_TESTEES);
+      const articles = articlesDesEntrees(entrees, origin, NB_PAGES_TESTEES);
+      const urls = articles.map(function (e) { return e.url; });
       const source = (news || entrees.some(function (e) { return e.news; })) ? "plan news" : "plan de site";
-      essais.push(court(lot[i]) + " : " + urls.length + " " + (urls.length >= 2 ? "articles" : "article"));
-      if (urls.length >= 4) return { urls: urls, source: source, essais: essais };
-      if (urls.length && (!repli || urls.length > repli.urls.length)) repli = { urls: urls, source: source, essais: essais };
+      // Un plan est frais si son article le plus recent a moins de 45 jours. Sans date,
+      // seul un plan news est presume frais : un plan general peut ouvrir sur des archives
+      // (alternatives-economiques.fr remontait des articles de 1993).
+      const plusRecent = articles.reduce(function (m, e) { return Math.max(m, e.t); }, 0);
+      const frais = plusRecent ? (plusRecent > Date.now() - 45 * 86400000) : source === "plan news";
+      essais.push(court(lot[i]) + " : " + urls.length + " " + (urls.length >= 2 ? "articles" : "article")
+                  + (frais ? "" : ", plan ancien ou sans date"));
+      const resultat = { urls: urls, source: source, frais: frais, essais: essais };
+      if (urls.length >= 4 && frais) return resultat;
+      if (urls.length && (!repli || (frais && !repli.frais) || (frais === repli.frais && urls.length > repli.urls.length))) repli = resultat;
     }
     return null;
   };
 
   let trouve = await explorer(candidats.slice(0, 3));
   if (!trouve && delai() > 1200) trouve = await explorer(candidats.slice(3, 6));
-  return trouve || repli || { urls: [], source: "", essais: essais };
+  return trouve || repli || { urls: [], source: "", frais: false, essais: essais };
 }
 
 // --------- Mesure de l'independance vis-a-vis des plateformes ---------
@@ -1643,7 +1668,7 @@ exports.handler = async function (event) {
 
   // Echeance globale : tout doit etre rendu avant la limite de dix secondes de Netlify.
   const debut = Date.now();
-  ECHEANCE = debut + 9000;
+  ECHEANCE = debut + 8500;
 
   // Le robots.txt et la page d'accueil partent ensemble.
   const lectureRobots = readRobots(url);
@@ -1652,11 +1677,11 @@ exports.handler = async function (event) {
 
   // Les plans de site se cherchent sur l'adresse reellement servie (avec ou sans "www"),
   // pendant que l'accueil finit de se charger. Leur recherche est bornee dans le temps,
-  // pour laisser quatre secondes a la lecture des articles.
+  // pour laisser l'essentiel du delai a la lecture des articles.
   const origineCanon = (robots && robots.origineFinale) || origin;
   const [accueil, plan] = await Promise.all([
     lectureAccueil,
-    articlesDesPlans(origineCanon, robots && robots.texte, debut + 4800),
+    articlesDesPlans(origineCanon, robots && robots.texte, debut + 3800),
   ]);
 
   // Une seule lecture : les articles du plan de site d'abord, completes par ceux de l'accueil.
