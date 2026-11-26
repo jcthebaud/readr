@@ -294,6 +294,15 @@ function trouverArticles(html, origin, max) {
   return n[3].concat(n[2], n[1]).slice(0, limite);
 }
 
+// Mesure un paragraphe d'ouverture : longueur, presence d'une donnee, mot de renvoi.
+function mesurerParagraphe(p) {
+  const mots = p.split(/\s+/).length;
+  const chiffre = /\d/.test(p);
+  const renvoi = /^(mais|or|donc|ainsi|pourtant|cependant|il|elle|ils|elles|ce|cet|cette|cela|celui|celle|c'est|y|en)\b/i.test(p.trim());
+  return { texte: p.slice(0, 400), cle: normaliser(p).slice(0, 200), mots: mots, chiffre: chiffre,
+           renvoi: renvoi, directe: mots <= 60 && chiffre && !renvoi };
+}
+
 // Analyse une page article et en extrait les signaux mesurables.
 // Une page de rubrique ou d'accueil fausse toutes les mesures : on l'ecarte.
 // Un article se reconnait a son balisage, ou a defaut a sa densite redactionnelle.
@@ -330,7 +339,7 @@ function analyserPage(htmlComplet) {
     listes: 0, tableaux: 0, schemaFAQ: false, titresTotal: 0, titresQuestion: 0,
     parasUtiles: 0, paraMoyen: 0, ouvertureDirecte: false, ouverture: "", ouvertureMots: 0,
     ouvertureChiffre: false, ouvertureRenvoi: false, passage: "", passageNote: 0,
-    sourceCorps: "", coquille: false, mur: false, dateMajVisible: false,
+    sourceCorps: "", coquille: false, mur: false, dateMajVisible: false, premiers: [],
     schemaNews: false, pageAuteur: false, genreDeclare: false, citations: 0, sourcesPrimaires: 0,
     schemaAuteurTexte: false, noindex: false, nosnippet: false, maxSnippet: null, paywall: false,
     h1Unique: false, sautNiveau: false, sameAs: false, breadcrumb: false,
@@ -470,7 +479,10 @@ function analyserPage(htmlComplet) {
   // Une ligne de date ("Publie le...") ou une invitation a s'inscrire, placee avant le
   // texte, n'est pas le paragraphe d'ouverture : on passe au suivant.
   const horsTexte = /^(publi[e\u00e9]e?\s+le|mis\s+[a\u00e0]\s+jour|modifi[e\u00e9]e?\s+le|recevez\s|abonnez-vous|inscrivez-vous|lire\s+aussi|[a\u00e0]\s+lire\s+aussi)/i;
-  while (paras.length > 1 && paras[0].split(/\s+/).length < 30 && horsTexte.test(paras[0].trim())) {
+  // Meme chose pour un credit photo place dans un paragraphe ("© ...", "Photo : ...").
+  const credit = /\u00a9|^(cr[e\u00e9]dits?(\s+photo)?|photo|illustration)\s*:/i;
+  while (paras.length > 1 && paras[0].split(/\s+/).length < 30
+         && (horsTexte.test(paras[0].trim()) || credit.test(paras[0].trim()))) {
     paras = paras.slice(1);
   }
 
@@ -490,13 +502,15 @@ function analyserPage(htmlComplet) {
     res.paraMoyen = Math.round(longueurs.reduce(function (a, b) { return a + b; }, 0) / longueurs.length);
 
     // Paragraphe d'ouverture : c'est lui qui sert de reponse directe, ou non.
-    const premier = paras[0];
-    const motsPremier = premier.split(/\s+/).length;
-    res.ouverture = premier.slice(0, 400);
-    res.ouvertureMots = motsPremier;
-    res.ouvertureChiffre = /\d/.test(premier);
-    res.ouvertureRenvoi = /^(mais|or|donc|ainsi|pourtant|cependant|il|elle|ils|elles|ce|cet|cette|cela|celui|celle|c'est|y|en)\b/i.test(premier.trim());
-    res.ouvertureDirecte = motsPremier <= 60 && res.ouvertureChiffre && !res.ouvertureRenvoi;
+    // Les premiers paragraphes sont conserves : la lecture du site ecarte ensuite ceux
+    // qui se repetent d'un article a l'autre (encart d'abonnement, mention commune).
+    res.premiers = paras.slice(0, 5).map(mesurerParagraphe);
+    const premier = res.premiers[0];
+    res.ouverture = premier.texte;
+    res.ouvertureMots = premier.mots;
+    res.ouvertureChiffre = premier.chiffre;
+    res.ouvertureRenvoi = premier.renvoi;
+    res.ouvertureDirecte = premier.directe;
 
     // Meilleur passage extractible : autonome, calibre, avec une donnee
     const candidats = paras
@@ -642,6 +656,28 @@ async function lireSite(origin, rep, plan, origineCanon) {
       reseaux: a.reseaux,
     };
   });
+
+  // Un paragraphe present a l'identique en tete de plusieurs articles n'appartient a
+  // aucun d'eux (encart d'abonnement sur nouvelobs.com). Le paragraphe d'ouverture d'un
+  // article est donc son premier paragraphe qui ne se retrouve dans aucun autre.
+  if (pages.length >= 3) {
+    const occurrences = {};
+    pages.forEach(function (p) {
+      const vus = {};
+      p.mesures.premiers.forEach(function (x) {
+        if (x.cle && !vus[x.cle]) { vus[x.cle] = true; occurrences[x.cle] = (occurrences[x.cle] || 0) + 1; }
+      });
+    });
+    pages.forEach(function (p) {
+      const m = p.mesures;
+      const propre = m.premiers.filter(function (x) { return occurrences[x.cle] < 2; })[0];
+      if (propre && m.premiers[0] && propre.cle !== m.premiers[0].cle) {
+        m.ouverture = propre.texte; m.ouvertureMots = propre.mots;
+        m.ouvertureChiffre = propre.chiffre; m.ouvertureRenvoi = propre.renvoi;
+        m.ouvertureDirecte = propre.directe;
+      }
+    });
+  }
 
   const n = pages.length;
   const agg = pages.reduce(function (a, p) {
@@ -843,7 +879,15 @@ function articlesDesEntrees(entrees, origin, max) {
   // Plan date : les plus recents d'abord. Le tri est stable, l'ordre du plan departage.
   const dates = bons.filter(function (e) { return e.t > 0; });
   if (dates.length >= Math.min(bons.length, 6)) {
-    return uniques(dates.sort(function (a, b) { return b.t - a.t; })).slice(0, max);
+    const tri = uniques(dates.sort(function (a, b) { return b.t - a.t; }));
+    // Echantillon stable sur la journee : deux analyses du meme media, le meme jour,
+    // portent sur les memes articles. On prend d'abord ceux parus avant minuit (UTC),
+    // du plus recent au plus ancien ; ceux du jour ne font que completer, les premiers
+    // parus d'abord, car ce sont ceux qui ne changent plus au fil des publications.
+    const minuit = Math.floor(Date.now() / 86400000) * 86400000;
+    const veille = tri.filter(function (e) { return e.t < minuit; });
+    const duJour = tri.filter(function (e) { return e.t >= minuit; }).reverse();
+    return veille.concat(duJour).slice(0, max);
   }
   // Sans date, les plans rangent en general les nouveautes a la fin.
   return uniques(bons.slice().reverse()).slice(0, max)
