@@ -235,7 +235,7 @@ function forceArticle(abs) {
 
   const slug = dernier.indexOf("-") !== -1 && dernier.length >= 10;
   const date = /\/(19|20)\d{2}\//.test(chemin);
-  const identifiant = /\d{5,}/.test(dernier);
+  const identifiant = /\d{5,}/.test(chemin);
   const fichier = /\.(html?|php)$/i.test(dernier);
   if (chemin.length >= 10 && (date || identifiant || (fichier && slug))) return 3;
 
@@ -543,6 +543,7 @@ const NB_ARTICLES_RETENUS = 8;
 // rep : page d'accueil deja lue (ou null). plan : articles releves dans les plans de site.
 async function lireSite(origin, rep, plan, origineCanon) {
   const urlsPlan = ((plan && plan.urls) || []).slice(0, NB_PAGES_TESTEES);
+  const planNews = !!(plan && plan.source === "plan news");
 
   // Ni accueil ni plan de site : il n'y a rien a lire.
   if (!rep && !urlsPlan.length) {
@@ -576,7 +577,12 @@ async function lireSite(origin, rep, plan, origineCanon) {
     const mes = analyserPage(h.html);
     if (mes.mur && mes.mots < 400) murs++;
     if (mes.coquille) coquilles++;
-    if (!estUnArticle(mes)) return;                  // rubrique, accueil, page de service
+    // Une adresse du plan news est un article declare comme tel par l'editeur : un texte
+    // lisible suffit, meme sans balisage ni date (lesinrocks.com). Les autres pages
+    // passent la validation complete, qui ecarte rubriques et pages de service.
+    const declareArticle = planNews && i < urlsPlan.length && !mes.coquille
+                        && mes.mots >= 120 && mes.parasUtiles >= 3;
+    if (!declareArticle && !estUnArticle(mes)) return;
     candidates.push({ url: urls[i], duPlan: i < urlsPlan.length, mesures: mes,
                       extrait: texteVisible(h.html).slice(0, 450) });
   });
@@ -607,9 +613,19 @@ async function lireSite(origin, rep, plan, origineCanon) {
 
   // Les signaux d'audience propre se trouvent surtout dans l'entete et le pied de page.
   // Entete et pied de page figurent aussi sur les articles : sans accueil, on les y lit.
-  const pourAudience = (accueil ? accueil + " " : "")
-    + reps.filter(function (x) { return x; }).slice(0, 2).map(function (x) { return x.html; }).join(" ");
-  const audience = analyserAudience(pourAudience);
+  // Chaque page est lue separement et un signal vu une fois est acquis : le resultat ne
+  // depend plus de l'ordre dans lequel les pages ont ete lues.
+  const lues = (accueil ? [accueil] : [])
+    .concat(reps.filter(function (x) { return x; }).slice(0, 6).map(function (x) { return x.html; }));
+  const audience = lues.map(analyserAudience).reduce(function (a, b) {
+    return {
+      newsletter: a.newsletter || b.newsletter, formulaireEmail: a.formulaireEmail || b.formulaireEmail,
+      compte: a.compte || b.compte, abonnement: a.abonnement || b.abonnement,
+      appMobile: a.appMobile || b.appMobile, push: a.push || b.push, cmp: a.cmp || b.cmp,
+      // Liens vers les reseaux sociaux : ceux de la premiere page lue, sans cumul.
+      reseaux: a.reseaux,
+    };
+  });
 
   const n = pages.length;
   const agg = pages.reduce(function (a, p) {
@@ -916,7 +932,9 @@ function analyserAudience(html) {
   r.newsletter = /href=["'][^"']*\/(newsletter|newsletters|infolettre|infolettres)/i.test(html)
               || /href=["']https?:\/\/(newsletter|newsletters|nl)\.[^"']+/i.test(html)
               || /(inscri\w+|abonn\w+|recev\w+)[^<]{0,40}newsletter/i.test(t)
-              || /newsletter[^<]{0,40}(inscri\w+|recev\w+)/i.test(t);
+              || /newsletter[^<]{0,40}(inscri\w+|recev\w+)/i.test(t)
+              // Lien de menu intitule "Newsletters", quelle que soit son adresse (humanite.fr).
+              || /<a\s[^>]*>\s*(?:<[^>]+>\s*)*(?:nos\s+|les\s+|la\s+)?newsletters?\s*(?:<\/[^>]+>\s*)*<\/a>/i.test(t);
 
   // Point de collecte d'adresses : champ email, ou dispositif d'inscription newsletter.
   // Le champ est souvent injecte par le navigateur : on accepte donc aussi les intitules.
@@ -943,7 +961,13 @@ function analyserAudience(html) {
              || /<link[^>]+href=["'](android-app|ios-app):/i.test(html)
              || /href=["']https?:\/\/app\.[^"']+/i.test(html)
              || /href=["'][^"']*\/(application|applications|nos-applications|app-mobile|nos-apps|telecharger-l-application|telecharger-l-appli|telecharger-nos-applications|nos-applications-mobiles)(["'\/?#]|$)/i.test(html)
-             || /(t[eé]l[eé]charg\w*\s+(l'|notre\s+|nos\s+)?(appli|application)|disponible\s+sur\s+(l'app\s?store|l'appstore|le\s+google\s+play|google\s+play)|notre\s+application\s+mobile|retrouvez[-\s]nous\s+sur\s+l'appli)/i.test(t);
+             || /(t[eé]l[eé]charg\w*\s+(l'|notre\s+|nos\s+)?(appli|application)|disponible\s+sur\s+(l'app\s?store|l'appstore|le\s+google\s+play|google\s+play)|notre\s+application\s+mobile|retrouvez[-\s]nous\s+sur\s+l'appli)/i.test(t)
+             // Bloc de promotion dont les badges sont ajoutes par le navigateur : il reste dans
+             // le code un libelle isole "L'application mobile" ou le logo de l'application
+             // (challenges.fr). Le libelle doit former a lui seul le texte d'un element, pour
+             // ne pas confondre avec un article qui parle d'une application.
+             || />\s*(?:l'|notre\s+|nos\s+)?applications?\s+mobiles?\s*</i.test(t)
+             || /alt=["'][^"']*logo\s+(de\s+l')?appli(cation)?\b[^"']*["']/i.test(t);
 
   // Notifications push : canal direct, sans intermediaire
   r.push = /(onesignal|batch\.com|batchsdk|pushwoosh|serviceWorker[\s\S]{0,120}push|firebase-messaging)/i.test(html);
