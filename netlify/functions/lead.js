@@ -36,7 +36,9 @@ exports.handler = async function (event) {
         pagesLues: d.pagesLues || 0,
         robotsBloques: nb(d.robotsBloques),
         robotsTotal: nb(d.robotsTotal),
-        consent: (!ouverture && d.consent) ? "oui" : "non",
+        // Ouverture d'un lien direct : aucun accord n'a été donné. La valeur est laissée vide,
+        // car le script de la feuille écrit « oui » dès qu'elle est renseignée.
+        consent: ouverture ? "" : (d.consent ? "oui" : "non"),
       }),
     });
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
