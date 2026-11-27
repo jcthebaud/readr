@@ -1028,8 +1028,12 @@ function analyserAudience(html) {
                    || /(votre\s+(adresse\s+)?(e-?mail|courriel)|saisir\s+votre\s+e-?mail|s'inscrire\s+(a|à)\s+la\s+newsletter|recevoir\s+(la|nos|notre)\s+newsletter)/i.test(t);
 
   // Espace compte : la connexion est le socle d'une relation identifiee
+  // Trois formes rencontrees : une adresse dediee (/connexion), un sous-domaine
+  // dedie (membre., connect.), ou une ancre qui ouvre la fenetre de connexion
+  // (#showLoginForm). Les deux dernieres etaient manquees.
   r.compte = /href=["'][^"']*\/(login|connexion|se-connecter|mon-compte|moncompte|account|espace-client)/i.test(html)
-          || /href=["']https?:\/\/(compte|connexion|account|login)\.[^"']+/i.test(html)
+          || /href=["']https?:\/\/(compte|connexion|account|login|membre|membres|moncompte|sso|auth|connect)\.[^"']+/i.test(html)
+          || /href=["']#[^"']*(login|signin|connexion|connecter)[^"']*["']/i.test(html)
           || /(se\s+connecter|mon\s+compte|s'identifier|s'inscrire|cr[eé]er\s+un\s+compte)/i.test(t);
 
   // Offre d'abonnement : lien dedie, sous-domaine dedie (abo., abonnement., kiosque.),
@@ -1202,7 +1206,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-11-26 / v13 : plans de site declares et plan news date, adresse canonique, echantillon elargi, paragraphes mieux isoles";
+const VERSION = "2026-11-27 / v16 : auteur en simple texte distingue de l'auteur absent, espace compte mieux repere";
 
 // ============================================================
 //  TEXTES DU RAPPORT
@@ -1419,8 +1423,18 @@ function scorePotentiel(m, robots) {
   d.push({ cle: "auteur",
            obtenu: (m.auteurBalise === "present" ? 8 : (m.auteurBalise === "partiel" ? 4 : 0))
                  + (m.pageAuteur === "present" ? 4 : (m.pageAuteur === "partiel" ? 2 : 0)), max: 12,
-           constat: (m.auteurBalise === "present" ? "Auteur déclaré dans les données structurées" : "Auteur absent des données structurées")
-                  + (m.pageAuteur === "present" ? ", relié à une page journaliste" : ", sans page journaliste") });
+           // Un auteur ecrit en simple texte est declare : le dire absent serait faux.
+           // Les points ne changent pas, seul le constat et l'action sont precises.
+           constat: (m.auteurBalise === "present" ? "Auteur déclaré dans les données structurées"
+                  : (m.auteurBalise === "partiel" ? "Auteur déclaré sur une partie des articles seulement"
+                  : (m.auteurTexteSeul ? "Auteur déclaré en simple texte dans les données structurées"
+                  : "Auteur absent des données structurées")))
+                  + (m.pageAuteur === "present" ? ", relié à une page journaliste"
+                  : (m.pageAuteur === "partiel" ? ", relié à une page journaliste sur une partie des articles"
+                  : ", sans page journaliste")),
+           action: (m.auteurBalise === "absent" && m.auteurTexteSeul)
+                   ? "Déclarer l'auteur comme une personne dans les données structurées (type Person, avec son nom et l'adresse de sa page) plutôt qu'en simple texte."
+                   : "" });
 
   d.push({ cle: "paragraphes",
            obtenu: (m.paraMoyen >= 25 && m.paraMoyen <= 70) ? 12 : ((m.paraMoyen >= 18 && m.paraMoyen <= 95) ? 7 : 2), max: 12,
@@ -1582,7 +1596,7 @@ function construireRecos(citab, audience) {
     .slice(0, 4)
     .forEach(function (x) {
       const t = TEXTES.criteres[x.cle];
-      recos.push({ titre: t.nom, action: t.action, perdus: x.max - x.obtenu, famille: "Potentiel de citation" });
+      recos.push({ titre: t.nom, action: x.action || t.action, perdus: x.max - x.obtenu, famille: "Potentiel de citation" });
     });
 
   const manque = audience.detail.filter(function (x) { return x.obtenu === 0; })
@@ -1611,7 +1625,7 @@ function construireConstats(bloc, famille) {
       etat: etat,
       constat: x.constat,
       pourquoi: t.pourquoi,
-      action: etat === "fort" ? "" : t.action,
+      action: etat === "fort" ? "" : (x.action || t.action),
       obtenu: x.obtenu,
       max: x.max,
     };
