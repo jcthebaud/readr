@@ -654,6 +654,9 @@
   // Lien direct envoyé par Readr (?site=domaine&rapport=complet) : le rapport s'affiche
   // sans demande d'adresse, le destinataire étant déjà connu.
   var accesDirect = false;
+  // Code facultatif du lien envoyé (&ref=...) et navigateurs de Readr à ne pas compter.
+  var refLien = "";
+  function visiteInterne(){ try { return window.localStorage.getItem("readr-interne") === "1"; } catch(e) { return false; } }
   var libelleBouton = T.boutonNormal;
   var RE_DOMAINE = /^(?!-)[a-z0-9-]{1,63}(\.(?!-)[a-z0-9-]{1,63})*\.[a-z]{2,24}$/i;
 
@@ -711,7 +714,8 @@
   }
 
   function afficher(){
-    el("r-version").textContent = data.version ? ("Version de l'outil : " + data.version) : "";
+    el("r-version").textContent = (data.version ? ("Version de l'outil : " + data.version) : "")
+      + (visiteInterne() ? " / Ouvertures non comptées sur ce navigateur" : "");
     el("r-host").textContent = data.hostFinal ? data.hostFinal.replace(/^www\./i,"") : hostAnalyse;
     el("r-redir").innerHTML = data.redirige ? (T.redirection + " <b>" + esc(hostAnalyse) + "</b>") : "";
 
@@ -835,7 +839,7 @@
     el("done").textContent = robotsSeuls ? T.termineRobots : T.termine;
     el("email").value=""; el("consent").checked=false; el("unlock-btn").disabled=true;
     show("rapport");
-    if(accesDirect){ ouvrirRapport(); } else { show("gate"); }
+    if(accesDirect){ ouvrirRapport(); suivreLecture(); } else { show("gate"); }
   }
 
   function ouvrirRapport(){
@@ -874,6 +878,49 @@
     el("r-robots-list").innerHTML = h;
   }
 
+  // Lien direct envoyé par Readr : aucune adresse n'est demandée. On note seulement que le
+  // rapport a été consulté, une fois par session, après cinq secondes de lecture et un geste
+  // (défilement, souris, toucher, clavier), pour écarter les robots qui préchargent les liens.
+  function suivreLecture(){
+    if(visiteInterne()) return;
+    var vu = 0, geste = false, fait = false, horloge = null;
+    var gestes = ["scroll","pointermove","touchstart","keydown"];
+    function essai(){
+      if(fait || !geste || vu < 5) return;
+      fait = true; clearInterval(horloge);
+      gestes.forEach(function(g){ window.removeEventListener(g, surGeste); });
+      noterOuverture();
+    }
+    function surGeste(){ geste = true; essai(); }
+    gestes.forEach(function(g){ window.addEventListener(g, surGeste, { passive:true }); });
+    horloge = setInterval(function(){ if(document.visibilityState === "visible"){ vu++; essai(); } }, 1000);
+  }
+
+  function noterOuverture(){
+    if(!data || !accesDirect) return;
+    var cle = "readr-ouverture:" + hostAnalyse + ":" + refLien;
+    try {
+      if(window.sessionStorage.getItem(cle)) return;
+      window.sessionStorage.setItem(cle, "1");
+    } catch(e) {}
+    try {
+      fetch("/.netlify/functions/lead", {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          ouverture: true,
+          ref: refLien,
+          url: data.hostFinal || hostAnalyse,
+          site: hostAnalyse,
+          scoreCitabilite: data.potentiel ? data.potentiel.score : "",
+          scoreAudience: data.audience ? data.audience.score : "",
+          pagesLues: data.site_ ? data.site_.nbPages : 0,
+          robotsBloques: (data.robots && data.robots.dispo) ? data.robots.nbBloques : "",
+          robotsTotal: (data.robots && data.robots.dispo) ? data.robots.nbTotal : ""
+        })
+      }).catch(function(){});
+    } catch(e) {}
+  }
+
   async function debloquer(){
     el("unlock-btn").disabled = true;
     el("unlock-btn").textContent = T.boutonAttente;
@@ -910,12 +957,23 @@
 
   // Lien direct : ?site=domaine lance l'analyse dès l'ouverture de la page.
   // Avec &rapport=complet, le rapport s'affiche sans demande d'adresse.
+  // Avec &ref=code, l'ouverture est notée sous ce code dans la feuille des leads.
   (function(){
     var q;
     try { q = new URLSearchParams(window.location.search); } catch(e) { return; }
+    // ?interne=oui : ce navigateur est celui de Readr, ses ouvertures ne sont plus comptées.
+    try {
+      if(q.get("interne") === "oui") window.localStorage.setItem("readr-interne", "1");
+      if(q.get("interne") === "non") window.localStorage.removeItem("readr-interne");
+    } catch(e) {}
+    if(q.get("interne")){
+      el("r-version").textContent = visiteInterne()
+        ? "Ouvertures non comptées sur ce navigateur" : "Ouvertures de nouveau comptées sur ce navigateur";
+    }
     var s = (q.get("site") || "").trim();
     if(!s) return;
     accesDirect = q.get("rapport") === "complet";
+    refLien = (q.get("ref") || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24);
     el("url").value = s;
     el("analyze-btn").disabled = false;
     analyser();
