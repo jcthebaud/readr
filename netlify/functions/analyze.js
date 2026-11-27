@@ -1028,8 +1028,12 @@ function analyserAudience(html) {
                    || /(votre\s+(adresse\s+)?(e-?mail|courriel)|saisir\s+votre\s+e-?mail|s'inscrire\s+(a|à)\s+la\s+newsletter|recevoir\s+(la|nos|notre)\s+newsletter)/i.test(t);
 
   // Espace compte : la connexion est le socle d'une relation identifiee
+  // Trois formes rencontrees : une adresse dediee (/connexion), un sous-domaine
+  // dedie (membre., connect.), ou une ancre qui ouvre la fenetre de connexion
+  // (#showLoginForm). Les deux dernieres etaient manquees.
   r.compte = /href=["'][^"']*\/(login|connexion|se-connecter|mon-compte|moncompte|account|espace-client)/i.test(html)
-          || /href=["']https?:\/\/(compte|connexion|account|login)\.[^"']+/i.test(html)
+          || /href=["']https?:\/\/(compte|connexion|account|login|membre|membres|moncompte|sso|auth|connect)\.[^"']+/i.test(html)
+          || /href=["']#[^"']*(login|signin|connexion|connecter)[^"']*["']/i.test(html)
           || /(se\s+connecter|mon\s+compte|s'identifier|s'inscrire|cr[eé]er\s+un\s+compte)/i.test(t);
 
   // Offre d'abonnement : lien dedie, sous-domaine dedie (abo., abonnement., kiosque.),
@@ -1202,7 +1206,7 @@ async function readRobots(siteUrl) {
 // Version de la fonction. Elle s'affiche en bas du rapport et se consulte
 // directement dans un navigateur, ce qui permet de verifier ce qui tourne
 // reellement en ligne.
-const VERSION = "2026-11-27 / v16 : auteur declare en simple texte distingue de l'auteur absent";
+const VERSION = "2026-11-27 / v16 : auteur en simple texte distingue de l'auteur absent, espace compte mieux repere";
 
 // ============================================================
 //  TEXTES DU RAPPORT
