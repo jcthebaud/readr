@@ -1,5 +1,7 @@
 // Transmet le lead à la feuille de calcul Google.
 // Reçoit les deux scores, la thématique et l'état des robots.
+// Reçoit aussi l'ouverture d'un rapport par un lien direct envoyé par Readr : aucune
+// adresse n'est alors demandée, la ligne porte « Lien direct » et le code du lien.
 
 exports.handler = async function (event) {
   if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
@@ -7,8 +9,10 @@ exports.handler = async function (event) {
   let d;
   try { d = JSON.parse(event.body || "{}"); } catch (e) { d = {}; }
 
+  const ouverture = d.ouverture === true;
+  const ref = String(d.ref || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24);
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email || "");
-  if (!emailOk || !d.consent) {
+  if (!ouverture && (!emailOk || !d.consent)) {
     return { statusCode: 400, body: JSON.stringify({ error: "Adresse ou consentement invalide." }) };
   }
 
@@ -19,10 +23,10 @@ exports.handler = async function (event) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        email: d.email,
+        email: ouverture ? "" : d.email,
         url: d.url || "",
         site: d.site || "",
-        theme: d.theme || "",
+        theme: ouverture ? ("Lien direct" + (ref ? " : " + ref : "")) : (d.theme || ""),
         scoreCitabilite: nb(d.scoreCitabilite),
         scoreAudience: nb(d.scoreAudience),
         // Anciens noms des deux scores : le script de la feuille Google encore en ligne
@@ -32,7 +36,7 @@ exports.handler = async function (event) {
         pagesLues: d.pagesLues || 0,
         robotsBloques: nb(d.robotsBloques),
         robotsTotal: nb(d.robotsTotal),
-        consent: d.consent ? "oui" : "non",
+        consent: (!ouverture && d.consent) ? "oui" : "non",
       }),
     });
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
